@@ -1,0 +1,330 @@
+import { useState, useEffect, useRef } from 'react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Calendar,
+  Flag,
+  Zap,
+  ArrowRight,
+  LayoutDashboard,
+  AlertCircle,
+  CheckCircle2,
+  Timer,
+} from 'lucide-react'
+import { useApp } from '../../context/AppContext'
+import { useAuth } from '../../context/AuthContext'
+import { supabase } from '../../lib/supabase'
+import { cn } from '../../lib/utils'
+
+const PRIORITY_CONFIG = {
+  critical: { label: 'Crítica', color: 'bg-red-500', text: 'text-white' },
+  high: { label: 'Alta', color: 'bg-orange-500', text: 'text-white' },
+  medium: { label: 'Media', color: 'bg-yellow-500', text: 'text-black' },
+  low: { label: 'Baja', color: 'bg-blue-500', text: 'text-white' },
+}
+
+const STATUS_COLORS = {
+  'Por hacer': 'bg-gray-400',
+  'En progreso': 'bg-blue-500',
+  'En revisión': 'bg-yellow-500',
+  'Completado': 'bg-emerald-500',
+  'Bloqueado': 'bg-red-500',
+}
+
+export default function HomePage() {
+  const { state, dispatch } = useApp()
+  const { user } = useAuth()
+  const [upcomingTasks, setUpcomingTasks] = useState([])
+  const [recentBoards, setRecentBoards] = useState([])
+  const [loadingTasks, setLoadingTasks] = useState(true)
+  const carouselRef = useRef(null)
+
+  const greeting = getGreeting()
+  const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuario'
+
+  // Fetch recent boards across all workspaces
+  useEffect(() => {
+    async function fetchBoards() {
+      const { data } = await supabase
+        .from('boards')
+        .select('*, workspaces(name, color)')
+        .order('created_at', { ascending: false })
+        .limit(15)
+      if (data) setRecentBoards(data)
+    }
+    fetchBoards()
+  }, [])
+
+  // Fetch upcoming tasks across all workspaces
+  useEffect(() => {
+    async function fetchUpcoming() {
+      setLoadingTasks(true)
+      const today = new Date().toISOString().split('T')[0]
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*, boards(name, workspace_id, workspaces(name, color))')
+        .gte('due_date', today)
+        .neq('status', 'Completado')
+        .order('due_date', { ascending: true })
+        .limit(20)
+      if (!error && data) {
+        setUpcomingTasks(data)
+      }
+      setLoadingTasks(false)
+    }
+    fetchUpcoming()
+  }, [])
+
+  const scrollCarousel = (direction) => {
+    if (!carouselRef.current) return
+    const amount = 280
+    carouselRef.current.scrollBy({
+      left: direction === 'left' ? -amount : amount,
+      behavior: 'smooth',
+    })
+  }
+
+  const selectBoard = (board) => {
+    const workspace = state.workspaces.find(w => w.id === board.workspace_id)
+    if (workspace) {
+      dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: workspace })
+    }
+    dispatch({ type: 'SET_CURRENT_BOARD', payload: board })
+  }
+
+  const getDaysUntil = (dateStr) => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const date = new Date(dateStr + 'T00:00:00')
+    const diff = Math.ceil((date - today) / (1000 * 60 * 60 * 24))
+    return diff
+  }
+
+  const formatDueLabel = (dateStr) => {
+    const days = getDaysUntil(dateStr)
+    if (days === 0) return 'Hoy'
+    if (days === 1) return 'Mañana'
+    if (days < 7) return `En ${days} días`
+    return new Date(dateStr + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })
+  }
+
+  const getDueColor = (dateStr) => {
+    const days = getDaysUntil(dateStr)
+    if (days === 0) return 'text-red-500 bg-red-500/10'
+    if (days === 1) return 'text-orange-500 bg-orange-500/10'
+    if (days <= 3) return 'text-yellow-500 bg-yellow-500/10'
+    return 'text-muted-foreground bg-muted'
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <div className="max-w-4xl mx-auto px-6 py-8">
+        {/* Greeting */}
+        <div className="mb-8 animate-fade-in">
+          <h1 className="text-3xl font-bold text-foreground">{greeting},</h1>
+          <h2 className="text-3xl font-bold text-muted-foreground">{userName}</h2>
+        </div>
+
+        {/* Recent Boards Carousel */}
+        {recentBoards.length > 0 && (
+          <section className="mb-10 animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold text-foreground">Tableros recientes</h3>
+              </div>
+              {recentBoards.length > 3 && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => scrollCarousel('left')}
+                    className="p-1 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => scrollCarousel('right')}
+                    className="p-1 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div
+              ref={carouselRef}
+              className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+              {recentBoards.map(board => {
+                const wsName = board.workspaces?.name || ''
+                const wsColor = board.workspaces?.color || '#6c5ce7'
+                return (
+                  <button
+                    key={board.id}
+                    onClick={() => selectBoard(board)}
+                    className="group relative flex-shrink-0 w-[200px] h-[120px] rounded-xl border border-border overflow-hidden transition-all hover:shadow-lg hover:-translate-y-0.5 hover:border-muted-foreground/30"
+                  >
+                    <div className="h-1.5 w-full" style={{ backgroundColor: wsColor }} />
+                    <div className="p-3 flex flex-col justify-between h-[calc(100%-6px)] bg-card">
+                      <div className="flex items-start gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                          <LayoutDashboard className="w-4 h-4 text-muted-foreground" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate text-left">
+                            {board.name}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground text-left flex items-center gap-1">
+                            <span
+                              className="w-2 h-2 rounded-sm shrink-0"
+                              style={{ backgroundColor: wsColor }}
+                            />
+                            {wsName}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground">
+                          {board.created_at
+                            ? new Date(board.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short' })
+                            : ''}
+                        </span>
+                        <ArrowRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Upcoming Tasks */}
+        <section className="animate-fade-in">
+          <div className="flex items-center gap-2 mb-4">
+            <Calendar className="w-4 h-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-foreground">Próximas tareas</h3>
+            {upcomingTasks.length > 0 && (
+              <span className="text-xs text-muted-foreground">
+                ({upcomingTasks.length})
+              </span>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-border overflow-hidden bg-card">
+            {loadingTasks ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Timer className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">Cargando tareas...</span>
+                </div>
+              </div>
+            ) : upcomingTasks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 px-4">
+                <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-3">
+                  <CheckCircle2 className="w-7 h-7 text-muted-foreground" />
+                </div>
+                <p className="text-sm font-medium text-foreground mb-1">Todo al día</p>
+                <p className="text-xs text-muted-foreground text-center max-w-xs">
+                  No hay tareas pendientes con fecha próxima. Crea nuevas tareas desde un tablero.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Table header */}
+                <div className="grid grid-cols-[1fr_140px_100px_100px_90px] gap-0 bg-muted/50 border-b border-border text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  <div className="px-4 py-2.5">Tarea</div>
+                  <div className="px-3 py-2.5">Workspace</div>
+                  <div className="px-3 py-2.5 text-center">Estado</div>
+                  <div className="px-3 py-2.5 text-center">Prioridad</div>
+                  <div className="px-3 py-2.5 text-center">Fecha</div>
+                </div>
+
+                {/* Rows */}
+                {upcomingTasks.map(task => {
+                  const priority = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium
+                  const workspaceName = task.boards?.workspaces?.name || ''
+                  const workspaceColor = task.boards?.workspaces?.color || '#6c5ce7'
+                  const boardName = task.boards?.name || ''
+                  const dueLabel = task.due_date ? formatDueLabel(task.due_date) : ''
+                  const dueColor = task.due_date ? getDueColor(task.due_date) : ''
+
+                  return (
+                    <div
+                      key={task.id}
+                      className="grid grid-cols-[1fr_140px_100px_100px_90px] gap-0 border-b border-border last:border-b-0 hover:bg-accent/30 transition-colors text-sm"
+                    >
+                      {/* Task title */}
+                      <div className="px-4 py-3 flex items-center gap-2 min-w-0">
+                        <div className="min-w-0">
+                          <p className="text-foreground truncate font-medium text-[13px]">{task.title}</p>
+                          {boardName && (
+                            <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
+                              <LayoutDashboard className="w-3 h-3 shrink-0" />
+                              {boardName}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Workspace */}
+                      <div className="px-3 py-3 flex items-center gap-1.5 min-w-0">
+                        <div
+                          className="w-4 h-4 rounded shrink-0 flex items-center justify-center text-[8px] font-bold text-white"
+                          style={{ backgroundColor: workspaceColor }}
+                        >
+                          {workspaceName?.[0]?.toUpperCase()}
+                        </div>
+                        <span className="text-xs text-muted-foreground truncate">{workspaceName}</span>
+                      </div>
+
+                      {/* Status */}
+                      <div className="px-3 py-3 flex items-center justify-center">
+                        <span className={cn(
+                          'px-2 py-0.5 rounded-full text-[10px] font-medium text-white whitespace-nowrap',
+                          STATUS_COLORS[task.status] || 'bg-gray-400'
+                        )}>
+                          {task.status}
+                        </span>
+                      </div>
+
+                      {/* Priority */}
+                      <div className="px-3 py-3 flex items-center justify-center">
+                        <span className={cn(
+                          'px-2 py-0.5 rounded text-[10px] font-medium whitespace-nowrap',
+                          priority.color,
+                          priority.text
+                        )}>
+                          {priority.label}
+                        </span>
+                      </div>
+
+                      {/* Due date */}
+                      <div className="px-3 py-3 flex items-center justify-center">
+                        <span className={cn(
+                          'px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap',
+                          dueColor
+                        )}>
+                          {dueLabel}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </>
+            )}
+          </div>
+        </section>
+      </div>
+    </div>
+  )
+}
+
+function getGreeting() {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Buenos días'
+  if (hour < 18) return 'Buenas tardes'
+  return 'Buenas noches'
+}

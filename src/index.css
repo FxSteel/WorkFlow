@@ -1,0 +1,116 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-background: #ffffff;
+  --color-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0f172a;
+  --color-primary: #000000;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f1f5f9;
+  --color-secondary-foreground: #0f172a;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-accent: #f1f5f9;
+  --color-accent-foreground: #0f172a;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #e2e8f0;
+  --color-input: #e2e8f0;
+  --color-ring: #000000;
+  --color-sidebar: #f8fafc;
+  --color-sidebar-foreground: #0f172a;
+  --color-sidebar-border: #e2e8f0;
+  --color-sidebar-accent: #000000;
+  --color-success: #00b894;
+  --color-warning: #fdcb6e;
+  --color-info: #0984e3;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+.dark {
+  --color-background: #1a1a1f;
+  --color-foreground: #e4e4e7;
+  --color-card: #2C2D32;
+  --color-card-foreground: #e4e4e7;
+  --color-popover: #2C2D32;
+  --color-popover-foreground: #e4e4e7;
+  --color-primary: #e4e4e7;
+  --color-primary-foreground: #1a1a1f;
+  --color-secondary: #3a3b41;
+  --color-secondary-foreground: #e4e4e7;
+  --color-muted: #2C2D32;
+  --color-muted-foreground: #9c9ca4;
+  --color-accent: #3a3b41;
+  --color-accent-foreground: #e4e4e7;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #e4e4e7;
+  --color-border: #3a3b41;
+  --color-input: #3a3b41;
+  --color-ring: #e4e4e7;
+  --color-sidebar: #1a1a1f;
+  --color-sidebar-foreground: #e4e4e7;
+  --color-sidebar-border: #2C2D32;
+  --color-sidebar-accent: #e4e4e7;
+  --color-success: #00b894;
+  --color-warning: #fdcb6e;
+  --color-info: #74b9ff;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    margin: 0;
+  }
+  #root {
+    min-height: 100vh;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-muted-foreground);
+  border-radius: 3px;
+  opacity: 0.3;
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.animate-slide-in-right {
+  animation: slideInRight 0.3s ease-out;
+}
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+.animate-scale-in {
+  animation: scaleIn 0.2s ease-out;
+}
