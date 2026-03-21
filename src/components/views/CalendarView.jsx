@@ -15,7 +15,7 @@ const STATUS_COLORS = {
 }
 
 export default function CalendarView() {
-  const { state, openSidePanel } = useApp()
+  const { state, openTask } = useApp()
   const [currentDate, setCurrentDate] = useState(new Date())
 
   const year = currentDate.getFullYear()
@@ -137,7 +137,7 @@ export default function CalendarView() {
                 {tasks.slice(0, 3).map(task => (
                   <button
                     key={task.id}
-                    onClick={() => openSidePanel(task)}
+                    onClick={() => openTask(task)}
                     className={cn(
                       'w-full text-left px-1.5 py-0.5 rounded text-[10px] font-medium text-white truncate transition-opacity hover:opacity-80',
                       STATUS_COLORS[task.status] || 'bg-gray-400'

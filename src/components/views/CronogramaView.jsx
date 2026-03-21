@@ -11,7 +11,7 @@ const STATUS_COLORS = {
 }
 
 export default function CronogramaView() {
-  const { state, openSidePanel } = useApp()
+  const { state, openTask } = useApp()
 
   const weeks = useMemo(() => {
     const today = new Date()
@@ -106,7 +106,7 @@ export default function CronogramaView() {
                         {tasks.map(task => (
                           <button
                             key={task.id}
-                            onClick={() => openSidePanel(task)}
+                            onClick={() => openTask(task)}
                             className={cn(
                               'w-full text-left px-1.5 py-0.5 rounded text-[10px] font-medium text-white truncate hover:opacity-80 transition-opacity',
                               STATUS_COLORS[task.status]

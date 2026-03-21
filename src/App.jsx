@@ -8,6 +8,7 @@ import Topbar from './components/layout/Topbar'
 import BoardView from './components/board/BoardView'
 import TaskModal from './components/task/TaskModal'
 import TaskSidePanel from './components/task/TaskSidePanel'
+import TaskFullPage from './components/task/TaskFullPage'
 import SprintModal from './components/sprint/SprintModal'
 import InviteModal from './components/workspace/InviteModal'
 import SearchModal from './components/search/SearchModal'
@@ -15,8 +16,12 @@ import SettingsModal from './components/settings/SettingsModal'
 import AuthPage from './components/auth/AuthPage'
 import { Loader2 } from 'lucide-react'
 
+function getTaskEditorPref() {
+  return localStorage.getItem('workflow-task-editor-view') || 'sidebar'
+}
+
 function AppContent() {
-  const { state, dispatch, openTaskModal } = useApp()
+  const { state, dispatch, openTask } = useApp()
   const { user, signOut } = useAuth()
   const { fetchWorkspaces, fetchBoards } = useSupabase()
   const [showSprintModal, setShowSprintModal] = useState(false)
@@ -53,18 +58,23 @@ function AppContent() {
   }, [])
 
   const handleNewTask = () => {
-    openTaskModal({
+    const taskData = {
       title: '',
       description: '',
       status: 'Por hacer',
       priority: 'medium',
       sprint_id: state.sprints.length > 0 ? state.sprints[0].id : null,
-    })
+    }
+    // Use unified openTask which routes based on user preference
+    openTask(taskData)
   }
 
   const handleOpenInviteModal = (workspace) => {
     setInviteModal({ open: true, workspace })
   }
+
+  const pref = getTaskEditorPref()
+  const showFullPage = pref === 'fullpage' && (state.isTaskModalOpen || state.isSidePanelOpen)
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -81,8 +91,11 @@ function AppContent() {
         <BoardView />
       </div>
 
-      <TaskModal />
-      <TaskSidePanel />
+      {/* Task editors: render based on user preference */}
+      {pref === 'modal' && <TaskModal />}
+      {pref === 'sidebar' && <TaskSidePanel />}
+      {showFullPage && <TaskFullPage />}
+
       <SprintModal isOpen={showSprintModal} onClose={() => setShowSprintModal(false)} />
       <InviteModal
         isOpen={inviteModal.open}

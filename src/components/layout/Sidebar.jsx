@@ -21,6 +21,7 @@ import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import { cn } from '../../lib/utils'
+import SidebarSkeleton from '../skeleton/SidebarSkeleton'
 
 const WORKSPACE_COLORS = [
   '#6c5ce7', '#0984e3', '#00b894', '#e17055', '#fdcb6e',
@@ -47,7 +48,15 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
   const [editingType, setEditingType] = useState(null) // 'workspace' | 'board'
   const [editName, setEditName] = useState('')
   const [colorPicker, setColorPicker] = useState(null)
+  const [workspacesLoaded, setWorkspacesLoaded] = useState(false)
   const ctxRef = useRef(null)
+
+  // Track when workspaces have been loaded at least once
+  useEffect(() => {
+    if (state.workspaces.length > 0) {
+      setWorkspacesLoaded(true)
+    }
+  }, [state.workspaces])
 
   // Close context menu
   useEffect(() => {
@@ -191,7 +200,11 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
 
       {/* Workspaces */}
       <div className="flex-1 overflow-y-auto px-2 py-2">
-        {!collapsed && (
+        {!collapsed && !workspacesLoaded && (
+          <SidebarSkeleton />
+        )}
+
+        {!collapsed && workspacesLoaded && (
           <div className="flex items-center justify-between px-2 mb-2">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Espacios de trabajo

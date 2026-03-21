@@ -11,7 +11,7 @@ const STATUS_COLORS = {
 }
 
 export default function GanttView() {
-  const { state, openSidePanel } = useApp()
+  const { state, openTask } = useApp()
 
   const { tasks, startDate, totalDays, dayWidth } = useMemo(() => {
     const tasksWithDates = state.tasks.filter(t => t.due_date)
@@ -67,7 +67,7 @@ export default function GanttView() {
           {tasks.map(task => (
             <button
               key={task.id}
-              onClick={() => openSidePanel(task)}
+              onClick={() => openTask(task)}
               className="w-full h-10 px-3 flex items-center border-b border-border hover:bg-accent/50 transition-colors"
             >
               <span className="text-sm text-foreground truncate">{task.title}</span>
@@ -135,7 +135,7 @@ export default function GanttView() {
                 return (
                   <div key={task.id} className="h-10 relative border-b border-border">
                     <button
-                      onClick={() => openSidePanel(task)}
+                      onClick={() => openTask(task)}
                       className={cn(
                         'absolute top-1.5 h-7 rounded-md flex items-center px-2 text-[10px] font-medium text-white truncate transition-opacity hover:opacity-80',
                         STATUS_COLORS[task.status] || 'bg-gray-400'

@@ -52,7 +52,33 @@ export function useSupabase() {
       .select('*')
       .eq('workspace_id', workspaceId)
       .order('name', { ascending: true })
-    if (!error && data) dispatch({ type: 'SET_MEMBERS', payload: data })
+
+    if (!error && data) {
+      // Auto-add current user as member if not present
+      const { data: authData } = await supabase.auth.getUser()
+      const currentUserId = authData?.user?.id
+      if (currentUserId && !data.find(m => m.user_id === currentUserId)) {
+        const userName = authData.user.user_metadata?.full_name
+          || authData.user.email?.split('@')[0]
+          || 'Usuario'
+        const { data: newMember } = await supabase
+          .from('members')
+          .insert({
+            workspace_id: workspaceId,
+            user_id: currentUserId,
+            name: userName,
+            email: authData.user.email || '',
+            role: 'admin',
+            color: '#000000',
+          })
+          .select()
+          .single()
+        if (newMember) {
+          data.push(newMember)
+        }
+      }
+      dispatch({ type: 'SET_MEMBERS', payload: data })
+    }
     return { data, error }
   }, [dispatch])
 
@@ -73,6 +99,25 @@ export function useSupabase() {
         .select()
         .single()
       if (boardData) dispatch({ type: 'ADD_BOARD', payload: boardData })
+
+      // Add owner as member of the workspace
+      if (workspace.owner_id) {
+        const { data: userData } = await supabase.auth.getUser()
+        const ownerName = userData?.user?.user_metadata?.full_name
+          || userData?.user?.email?.split('@')[0]
+          || 'Admin'
+        const ownerEmail = userData?.user?.email || ''
+        await supabase
+          .from('members')
+          .insert({
+            workspace_id: data.id,
+            user_id: workspace.owner_id,
+            name: ownerName,
+            email: ownerEmail,
+            role: 'admin',
+            color: '#000000',
+          })
+      }
     }
     return { data, error }
   }, [dispatch])
@@ -152,6 +197,15 @@ export function useSupabase() {
       .single()
     if (!error && data) dispatch({ type: 'UPDATE_SPRINT', payload: data })
     return { data, error }
+  }, [dispatch])
+
+  const deleteSprint = useCallback(async (id) => {
+    const { error } = await supabase
+      .from('sprints')
+      .delete()
+      .eq('id', id)
+    if (!error) dispatch({ type: 'DELETE_SPRINT', payload: id })
+    return { error }
   }, [dispatch])
 
   // --- Tasks ---
@@ -271,6 +325,7 @@ export function useSupabase() {
     updateBoard,
     createSprint,
     updateSprint,
+    deleteSprint,
     createTask,
     updateTask,
     deleteTask,

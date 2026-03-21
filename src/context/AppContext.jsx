@@ -130,6 +130,15 @@ function appReducer(state, action) {
       )
       return { ...state, sprints }
     }
+    case 'DELETE_SPRINT': {
+      return {
+        ...state,
+        sprints: state.sprints.filter(s => s.id !== action.payload),
+        tasks: state.tasks.map(t =>
+          t.sprint_id === action.payload ? { ...t, sprint_id: null } : t
+        ),
+      }
+    }
     case 'ADD_INVITE':
       return { ...state, invites: [...state.invites, action.payload] }
     case 'DELETE_INVITE':
@@ -160,10 +169,23 @@ export function AppProvider({ children }) {
     dispatch({ type: 'CLOSE_SIDE_PANEL' })
   }, [])
 
+  // Unified task opener — respects user preference
+  const openTask = useCallback((task) => {
+    const pref = localStorage.getItem('workflow-task-editor-view') || 'sidebar'
+    if (pref === 'modal') {
+      dispatch({ type: 'OPEN_TASK_MODAL', payload: task })
+    } else if (pref === 'fullpage') {
+      dispatch({ type: 'OPEN_TASK_MODAL', payload: task })
+    } else {
+      dispatch({ type: 'OPEN_SIDE_PANEL', payload: task })
+    }
+  }, [])
+
   return (
     <AppContext.Provider value={{
       state,
       dispatch,
+      openTask,
       openTaskModal,
       closeTaskModal,
       openSidePanel,

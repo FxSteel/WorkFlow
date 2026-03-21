@@ -9,32 +9,29 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }) {
       showOutsideDays={showOutsideDays}
       className={cn("p-3", className)}
       classNames={{
-        months: "flex flex-col sm:flex-row gap-2",
-        month: "flex flex-col gap-4",
-        month_caption: "flex justify-center pt-1 relative items-center h-7",
+        months: "relative flex flex-col",
+        month: "flex flex-col gap-3",
+        month_caption: "flex items-center justify-center h-8 relative",
         caption_label: "text-sm font-medium text-foreground",
-        nav: "flex items-center gap-1",
-        button_previous: "absolute left-1 top-0 inline-flex items-center justify-center w-7 h-7 rounded-md border border-input bg-transparent hover:bg-accent hover:text-accent-foreground text-muted-foreground transition-colors",
-        button_next: "absolute right-1 top-0 inline-flex items-center justify-center w-7 h-7 rounded-md border border-input bg-transparent hover:bg-accent hover:text-accent-foreground text-muted-foreground transition-colors",
+        nav: "absolute inset-x-0 top-0 flex items-center justify-between h-8 z-10",
+        button_previous: "inline-flex items-center justify-center w-7 h-7 rounded-md border border-input bg-card hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer",
+        button_next: "inline-flex items-center justify-center w-7 h-7 rounded-md border border-input bg-card hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer",
         month_grid: "w-full border-collapse",
         weekdays: "flex",
         weekday: "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem] text-center",
         week: "flex w-full mt-1",
-        day: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20",
+        day: "relative p-0 text-center text-sm",
         day_button: cn(
-          "inline-flex items-center justify-center w-8 h-8 rounded-md font-normal transition-colors",
+          "inline-flex items-center justify-center w-8 h-8 rounded-md font-normal transition-colors cursor-pointer",
           "hover:bg-accent hover:text-accent-foreground",
           "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           "aria-selected:opacity-100"
         ),
-        selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground rounded-md",
+        selected: "bg-foreground text-background hover:bg-foreground hover:text-background rounded-md",
         today: "bg-accent text-accent-foreground font-semibold",
-        outside: "text-muted-foreground/40 aria-selected:bg-accent/50 aria-selected:text-muted-foreground",
-        disabled: "text-muted-foreground/30",
+        outside: "text-muted-foreground/40",
+        disabled: "text-muted-foreground/30 cursor-not-allowed",
         hidden: "invisible",
-        range_middle: "aria-selected:bg-accent aria-selected:text-accent-foreground",
-        range_end: "rounded-r-md",
-        range_start: "rounded-l-md",
         ...classNames,
       }}
       components={{

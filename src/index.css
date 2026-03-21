@@ -114,3 +114,294 @@
 .animate-scale-in {
   animation: scaleIn 0.2s ease-out;
 }
+
+/* Tiptap Editor */
+.block-editor .tiptap {
+  outline: none;
+  min-height: 60px;
+}
+.block-editor .tiptap p {
+  margin: 0.25em 0;
+  font-size: 0.875rem;
+  line-height: 1.625;
+}
+.block-editor .tiptap h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0.5em 0 0.25em;
+  color: var(--color-foreground);
+}
+.block-editor .tiptap h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0.5em 0 0.25em;
+  color: var(--color-foreground);
+}
+.block-editor .tiptap h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.4em 0 0.2em;
+  color: var(--color-foreground);
+}
+.block-editor .tiptap ul:not([data-type="taskList"]) {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin: 0.25em 0;
+}
+.block-editor .tiptap ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin: 0.25em 0;
+}
+.block-editor .tiptap li {
+  font-size: 0.875rem;
+  line-height: 1.75;
+}
+.block-editor .tiptap li p {
+  margin: 0;
+}
+.block-editor .tiptap li::marker {
+  color: var(--color-muted-foreground);
+}
+/* Task list — Notion style */
+.block-editor .tiptap ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+  margin: 0.25em 0;
+}
+.block-editor .tiptap ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 2px 0;
+}
+.block-editor .tiptap ul[data-type="taskList"] li > label {
+  display: flex;
+  align-items: center;
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+.block-editor .tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--color-muted-foreground);
+  border-radius: 0.25rem;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+  background: transparent;
+}
+.block-editor .tiptap ul[data-type="taskList"] li > label input[type="checkbox"]:hover {
+  border-color: var(--color-foreground);
+}
+.block-editor .tiptap ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
+  background: var(--color-foreground);
+  border-color: var(--color-foreground);
+}
+.block-editor .tiptap ul[data-type="taskList"] li > label input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--color-background);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.block-editor .tiptap ul[data-type="taskList"] li[data-checked="true"] > div > p {
+  text-decoration: line-through;
+  color: var(--color-muted-foreground);
+}
+.block-editor .tiptap blockquote {
+  border-left: 3px solid var(--color-border);
+  padding-left: 0.75rem;
+  margin: 0.5em 0;
+  color: var(--color-muted-foreground);
+  font-style: italic;
+}
+.block-editor .tiptap blockquote p {
+  margin: 0;
+}
+.block-editor .tiptap code {
+  background: var(--color-muted);
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.8rem;
+  font-family: ui-monospace, monospace;
+}
+/* Code block with language selector */
+.code-block-wrapper {
+  margin: 0.5em 0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  background: var(--color-muted);
+}
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0.5rem;
+  background: color-mix(in srgb, var(--color-muted) 80%, var(--color-border));
+  border-bottom: 1px solid var(--color-border);
+}
+.code-lang-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--color-muted-foreground);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.code-lang-btn:hover {
+  color: var(--color-foreground);
+  border-color: var(--color-muted-foreground);
+}
+.code-block-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+.code-copy-btn {
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  color: var(--color-muted-foreground);
+  cursor: pointer;
+  transition: all 0.15s;
+  background: none;
+  border: none;
+}
+.code-copy-btn:hover {
+  color: var(--color-foreground);
+  background: var(--color-accent);
+}
+.code-lang-dropdown {
+  position: fixed;
+  width: 12rem;
+  max-height: 16rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-popover);
+  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.2);
+  z-index: 50;
+  overflow: hidden;
+  animation: scaleIn 0.15s ease-out;
+}
+.code-lang-search {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-foreground);
+  outline: none;
+}
+.code-lang-search::placeholder {
+  color: var(--color-muted-foreground);
+}
+.code-lang-list {
+  max-height: 12rem;
+  overflow-y: auto;
+  padding: 0.25rem;
+}
+.code-lang-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--color-foreground);
+  border-radius: 0.375rem;
+  cursor: pointer;
+  border: none;
+  background: none;
+  transition: background 0.1s;
+}
+.code-lang-option:hover {
+  background: var(--color-accent);
+}
+.code-lang-option.active {
+  background: var(--color-accent);
+  font-weight: 600;
+}
+.code-block-wrapper pre {
+  padding: 0.75rem 1rem;
+  margin: 0;
+  overflow-x: auto;
+}
+.code-block-wrapper pre code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  color: var(--color-foreground);
+  background: none;
+  padding: 0;
+  line-height: 1.6;
+}
+/* Syntax highlighting */
+.code-block-wrapper .hljs-comment,
+.code-block-wrapper .hljs-quote { color: #6a737d; }
+.code-block-wrapper .hljs-keyword,
+.code-block-wrapper .hljs-selector-tag { color: #d73a49; }
+.code-block-wrapper .hljs-string,
+.code-block-wrapper .hljs-attr { color: #032f62; }
+.code-block-wrapper .hljs-number,
+.code-block-wrapper .hljs-literal { color: #005cc5; }
+.code-block-wrapper .hljs-built_in,
+.code-block-wrapper .hljs-title { color: #6f42c1; }
+.code-block-wrapper .hljs-function { color: #6f42c1; }
+.dark .code-block-wrapper .hljs-comment,
+.dark .code-block-wrapper .hljs-quote { color: #8b949e; }
+.dark .code-block-wrapper .hljs-keyword,
+.dark .code-block-wrapper .hljs-selector-tag { color: #ff7b72; }
+.dark .code-block-wrapper .hljs-string,
+.dark .code-block-wrapper .hljs-attr { color: #a5d6ff; }
+.dark .code-block-wrapper .hljs-number,
+.dark .code-block-wrapper .hljs-literal { color: #79c0ff; }
+.dark .code-block-wrapper .hljs-built_in,
+.dark .code-block-wrapper .hljs-title { color: #d2a8ff; }
+.dark .code-block-wrapper .hljs-function { color: #d2a8ff; }
+.block-editor .tiptap hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 1em 0;
+}
+.block-editor .tiptap img {
+  max-width: 100%;
+  max-height: 20rem;
+  border-radius: 0.5rem;
+  margin: 0.5em 0;
+  object-fit: contain;
+}
+.block-editor .tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--color-muted-foreground);
+  opacity: 0.4;
+  pointer-events: none;
+  height: 0;
+}
+.block-editor .tiptap .media-block {
+  margin: 0.5em 0;
+}
+.block-editor .tiptap .media-caption {
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground);
+  margin: 0.25em 0 0;
+}
+.block-editor .tiptap a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.block-editor .tiptap a:hover {
+  opacity: 0.8;
+}

@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
+import { createPortal } from "react-dom"
 import { Calendar as CalendarIcon } from "lucide-react"
 import { format, parse, isValid } from "date-fns"
 import { es } from "date-fns/locale"
@@ -13,18 +14,46 @@ export default function DatePicker({
   size = "md",
 }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef(null)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const triggerRef = useRef(null)
+  const dropdownRef = useRef(null)
 
   const selectedDate = value ? parse(value, "yyyy-MM-dd", new Date()) : undefined
   const isValidDate = selectedDate && isValid(selectedDate)
 
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
+  const updatePosition = useCallback(() => {
+    if (!triggerRef.current) return
+    const rect = triggerRef.current.getBoundingClientRect()
+    const dropdownHeight = 330
+    const spaceBelow = window.innerHeight - rect.bottom
+    const top = spaceBelow < dropdownHeight
+      ? rect.top - dropdownHeight - 4
+      : rect.bottom + 4
+    setPos({
+      top,
+      left: Math.min(rect.left, window.innerWidth - 290),
+    })
   }, [])
+
+  useEffect(() => {
+    if (!open) return
+    updatePosition()
+    const handleClickOutside = (e) => {
+      if (
+        triggerRef.current && !triggerRef.current.contains(e.target) &&
+        dropdownRef.current && !dropdownRef.current.contains(e.target)
+      ) {
+        setOpen(false)
+      }
+    }
+    const handleScroll = () => updatePosition()
+    document.addEventListener("mousedown", handleClickOutside)
+    window.addEventListener("scroll", handleScroll, true)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      window.removeEventListener("scroll", handleScroll, true)
+    }
+  }, [open, updatePosition])
 
   const handleSelect = (date) => {
     if (date) {
@@ -41,35 +70,41 @@ export default function DatePicker({
   }
 
   return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className={cn(
-          "inline-flex items-center rounded-lg border border-input bg-background text-foreground hover:bg-accent transition-colors w-full",
-          !isValidDate && "text-muted-foreground",
-          sizes[size] || sizes.md,
-          className
-        )}
-      >
-        <CalendarIcon className={cn("shrink-0", size === "sm" ? "w-3 h-3" : "w-4 h-4")} />
-        <span className="truncate text-left flex-1">
-          {isValidDate
-            ? format(selectedDate, "d MMM yyyy", { locale: es })
-            : placeholder
-          }
-        </span>
-      </button>
+    <>
+      <div className="relative" ref={triggerRef}>
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className={cn(
+            "inline-flex items-center rounded-lg border border-input bg-background text-foreground hover:bg-accent transition-colors w-full",
+            !isValidDate && "text-muted-foreground",
+            sizes[size] || sizes.md,
+            className
+          )}
+        >
+          <CalendarIcon className={cn("shrink-0", size === "sm" ? "w-3 h-3" : "w-4 h-4")} />
+          <span className="truncate text-left flex-1">
+            {isValidDate
+              ? format(selectedDate, "d MMM yyyy", { locale: es })
+              : placeholder
+            }
+          </span>
+        </button>
+      </div>
 
-      {open && (
-        <div className="absolute top-full left-0 z-50 mt-1 rounded-xl border border-border bg-popover shadow-xl animate-scale-in">
+      {open && createPortal(
+        <div
+          ref={dropdownRef}
+          className="fixed z-[200] rounded-xl border border-border bg-popover shadow-xl animate-scale-in"
+          style={{ top: pos.top, left: pos.left }}
+        >
           <Calendar
             mode="single"
             selected={isValidDate ? selectedDate : undefined}
             onSelect={handleSelect}
             defaultMonth={isValidDate ? selectedDate : new Date()}
             locale={es}
-            captionLayout="dropdown"
+            captionLayout="buttons"
           />
           {isValidDate && (
             <div className="px-3 pb-3 pt-0">
@@ -81,8 +116,9 @@ export default function DatePicker({
               </button>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   )
 }

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   X, Settings, Bell, Link2, Building2, Trash2,
   AlertTriangle, Upload, CheckCircle2, Loader2,
+  SlidersHorizontal, PanelRight, Maximize2, Layers,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -9,6 +10,7 @@ import { cn } from '../../lib/utils'
 
 const TABS = [
   { id: 'general', label: 'Configuración general', icon: Settings },
+  { id: 'preferences', label: 'Preferencias', icon: SlidersHorizontal },
   { id: 'notifications', label: 'Notificaciones', icon: Bell },
   { id: 'connections', label: 'Conexiones', icon: Link2, disabled: true },
 ]
@@ -73,6 +75,7 @@ export default function SettingsModal({ isOpen, onClose }) {
 
           <div className="flex-1 overflow-y-auto">
             {activeTab === 'general' && <GeneralSettings />}
+            {activeTab === 'preferences' && <PreferencesSettings />}
             {activeTab === 'notifications' && <NotificationSettings />}
           </div>
         </div>
@@ -267,6 +270,100 @@ function GeneralSettings() {
           )}
         </div>
       </section>
+    </div>
+  )
+}
+
+function PreferencesSettings() {
+  const [taskView, setTaskView] = useState(() =>
+    localStorage.getItem('workflow-task-editor-view') || 'sidebar'
+  )
+  const [saved, setSaved] = useState(false)
+
+  const changeView = (view) => {
+    setTaskView(view)
+    localStorage.setItem('workflow-task-editor-view', view)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 1500)
+  }
+
+  const VIEW_OPTIONS = [
+    {
+      id: 'sidebar',
+      label: 'Ventana lateral',
+      description: 'Se abre un panel en el lado derecho de la pantalla',
+      icon: PanelRight,
+    },
+    {
+      id: 'modal',
+      label: 'Ventana central',
+      description: 'Se abre un modal en el centro de la pantalla',
+      icon: Layers,
+    },
+    {
+      id: 'fullpage',
+      label: 'Página completa',
+      description: 'Se abre como una página completa estilo Notion',
+      icon: Maximize2,
+    },
+  ]
+
+  return (
+    <div className="px-6 py-5 space-y-6">
+      <div>
+        <h4 className="text-sm font-semibold text-foreground mb-1">Vista de edición de tareas</h4>
+        <p className="text-xs text-muted-foreground mb-4">
+          Elige cómo quieres abrir las tareas al crearlas o editarlas. Esta preferencia solo afecta tu cuenta.
+        </p>
+
+        {saved && (
+          <div className="flex items-center gap-1.5 mb-3 text-xs text-success animate-fade-in">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Guardado automáticamente
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {VIEW_OPTIONS.map(opt => {
+            const Icon = opt.icon
+            const isSelected = taskView === opt.id
+            return (
+              <button
+                key={opt.id}
+                onClick={() => changeView(opt.id)}
+                className={cn(
+                  'w-full flex items-center gap-4 p-4 rounded-xl border text-left transition-all',
+                  isSelected
+                    ? 'border-foreground bg-foreground/5'
+                    : 'border-border hover:border-muted-foreground/40 hover:bg-accent/30'
+                )}
+              >
+                <div className={cn(
+                  'w-10 h-10 rounded-lg flex items-center justify-center shrink-0',
+                  isSelected ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground'
+                )}>
+                  <Icon className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={cn(
+                    'text-sm font-medium',
+                    isSelected ? 'text-foreground' : 'text-foreground'
+                  )}>
+                    {opt.label}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{opt.description}</p>
+                </div>
+                <div className={cn(
+                  'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors',
+                  isSelected ? 'border-foreground' : 'border-border'
+                )}>
+                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-foreground" />}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }

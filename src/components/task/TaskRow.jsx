@@ -1,6 +1,8 @@
-import { useState, useRef, useEffect } from 'react'
-import { MoreHorizontal, Eye, Edit, Trash2, GripVertical } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
+import { MoreHorizontal, Edit, Trash2, GripVertical, Copy } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import DatePicker from '../ui/DatePicker'
 import { cn } from '../../lib/utils'
@@ -22,62 +24,126 @@ const PRIORITY_CONFIG = {
   low: { label: 'Baja', color: 'bg-blue-500', textColor: 'text-white' },
 }
 
-export default function TaskRow({ task }) {
-  const { state, openTaskModal, openSidePanel } = useApp()
-  const { updateTask, deleteTask } = useSupabase()
-  const [showMenu, setShowMenu] = useState(false)
-  const [showStatusMenu, setShowStatusMenu] = useState(false)
-  const [showPriorityMenu, setShowPriorityMenu] = useState(false)
-  const [showAssigneeMenu, setShowAssigneeMenu] = useState(false)
-  const menuRef = useRef(null)
-  const statusRef = useRef(null)
-  const priorityRef = useRef(null)
-  const assigneeRef = useRef(null)
+// Portal dropdown hook
+function usePortalDropdown() {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const triggerRef = useRef(null)
+  const dropdownRef = useRef(null)
 
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false)
-      if (statusRef.current && !statusRef.current.contains(e.target)) setShowStatusMenu(false)
-      if (priorityRef.current && !priorityRef.current.contains(e.target)) setShowPriorityMenu(false)
-      if (assigneeRef.current && !assigneeRef.current.contains(e.target)) setShowAssigneeMenu(false)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+  const updatePos = useCallback((align = 'left', width = 160) => {
+    if (!triggerRef.current) return
+    const rect = triggerRef.current.getBoundingClientRect()
+    const top = rect.bottom + 4
+    let left = align === 'right' ? rect.right - width : rect.left
+    left = Math.max(4, Math.min(left, window.innerWidth - width - 4))
+    setPos({ top: Math.min(top, window.innerHeight - 200), left })
   }, [])
 
-  const handleStatusChange = async (status) => {
-    await updateTask(task.id, { status })
-    setShowStatusMenu(false)
+  useEffect(() => {
+    if (!open) return
+    const close = (e) => {
+      if (
+        triggerRef.current && !triggerRef.current.contains(e.target) &&
+        dropdownRef.current && !dropdownRef.current.contains(e.target)
+      ) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  return { open, setOpen, pos, updatePos, triggerRef, dropdownRef }
+}
+
+export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
+  const { state, openTask } = useApp()
+  const { user } = useAuth()
+  const { updateTask, deleteTask, createTask } = useSupabase()
+
+  const assignableUsers = useMemo(() => {
+    // Always use member.id (members table PK), not user.id (auth UUID)
+    // The current user should already be in the members list as admin
+    return state.members.map(m => ({
+      id: m.id,
+      name: m.name,
+      email: m.email,
+      avatar: m.user_id === user?.id ? user?.user_metadata?.avatar_url : null,
+      color: m.color || '#6c5ce7',
+      isCurrentUser: m.user_id === user?.id,
+    }))
+  }, [user, state.members])
+
+  const assignee = usePortalDropdown()
+  const status = usePortalDropdown()
+  const priority = usePortalDropdown()
+  const sprint = usePortalDropdown()
+  const actions = usePortalDropdown()
+
+  const sprintObj = state.sprints.find(s => s.id === task.sprint_id)
+  const sprintName = sprintObj?.name || null
+
+  const handleSprintChange = async (sprintId) => {
+    await updateTask(task.id, { sprint_id: sprintId })
+    sprint.setOpen(false)
   }
 
-  const handlePriorityChange = async (priority) => {
-    await updateTask(task.id, { priority })
-    setShowPriorityMenu(false)
+  const handleStatusChange = async (s) => {
+    await updateTask(task.id, { status: s })
+    status.setOpen(false)
+  }
+
+  const handlePriorityChange = async (p) => {
+    await updateTask(task.id, { priority: p })
+    priority.setOpen(false)
   }
 
   const handleAssigneeChange = async (memberId, memberName) => {
     await updateTask(task.id, { assignee_id: memberId, assignee_name: memberName })
-    setShowAssigneeMenu(false)
+    assignee.setOpen(false)
   }
 
-  const handleDateChange = async (e) => {
-    await updateTask(task.id, { due_date: e.target.value || null })
+  const handleDuplicate = async () => {
+    await createTask({
+      title: `${task.title} (copia)`,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      assignee_id: task.assignee_id,
+      assignee_name: task.assignee_name,
+      due_date: task.due_date,
+      sprint_id: task.sprint_id,
+      tags: task.tags,
+      board_id: task.board_id,
+      position: state.tasks.length,
+    })
+    actions.setOpen(false)
   }
 
   const handleDelete = async () => {
     await deleteTask(task.id)
-    setShowMenu(false)
+    actions.setOpen(false)
   }
 
   const priorityConfig = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium
 
   return (
-    <div className="grid grid-cols-[minmax(300px,2fr)_120px_100px_120px_100px_80px] gap-0 border-b border-border last:border-b-0 hover:bg-accent/30 transition-colors group text-sm">
+    <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move'
+        onDragStart?.(task)
+      }}
+      onDragEnd={() => onDragEnd?.()}
+      className={cn(
+        'grid grid-cols-[minmax(250px,2fr)_120px_110px_110px_100px_100px_70px] gap-0 border-b border-border last:border-b-0 hover:bg-accent/30 transition-all group text-sm',
+        isDragging && 'opacity-40 scale-[0.98] bg-accent/20'
+      )}
+    >
       {/* Task Name */}
       <div className="px-3 py-2.5 flex items-center gap-2 min-w-0">
         <GripVertical className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 cursor-grab" />
         <button
-          onClick={() => openSidePanel(task)}
+          onClick={() => openTask(task)}
           className="truncate text-foreground hover:text-primary transition-colors text-left"
         >
           {task.title}
@@ -85,9 +151,10 @@ export default function TaskRow({ task }) {
       </div>
 
       {/* Assignee */}
-      <div className="px-3 py-2.5 flex items-center justify-center relative" ref={assigneeRef}>
+      <div className="px-3 py-2.5 flex items-center justify-center">
         <button
-          onClick={() => setShowAssigneeMenu(!showAssigneeMenu)}
+          ref={assignee.triggerRef}
+          onClick={() => { assignee.updatePos('left', 176); assignee.setOpen(!assignee.open) }}
           className="flex items-center gap-1.5 hover:bg-accent rounded px-1.5 py-0.5 transition-colors"
         >
           {task.assignee_name ? (
@@ -102,37 +169,51 @@ export default function TaskRow({ task }) {
           )}
         </button>
 
-        {showAssigneeMenu && (
-          <div className="absolute top-full z-50 mt-1 w-44 rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in">
+        {assignee.open && createPortal(
+          <div
+            ref={assignee.dropdownRef}
+            className="fixed z-[200] w-44 rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in"
+            style={{ top: assignee.pos.top, left: assignee.pos.left }}
+          >
             <button
               onClick={() => handleAssigneeChange(null, null)}
-              className="w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors text-muted-foreground"
+              className="w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2 text-muted-foreground"
             >
+              <div className="w-5 h-5 rounded-full border-2 border-dashed border-muted-foreground/40 shrink-0" />
               Sin asignar
             </button>
-            {state.members.map(member => (
+            {assignableUsers.map(u => (
               <button
-                key={member.id}
-                onClick={() => handleAssigneeChange(member.id, member.name)}
-                className="w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2"
+                key={u.id}
+                onClick={() => handleAssigneeChange(u.id, u.name)}
+                className={cn(
+                  'w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2',
+                  task.assignee_id === u.id && 'bg-accent/50'
+                )}
               >
-                <div
-                  className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold text-white"
-                  style={{ backgroundColor: member.color || '#6c5ce7' }}
-                >
-                  {member.name[0]?.toUpperCase()}
-                </div>
-                {member.name}
+                {u.avatar ? (
+                  <img src={u.avatar} alt="" className="w-5 h-5 rounded-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <div
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold text-white shrink-0"
+                    style={{ backgroundColor: u.color }}
+                  >
+                    {u.name[0]?.toUpperCase()}
+                  </div>
+                )}
+                {u.name}
               </button>
             ))}
-          </div>
+          </div>,
+          document.body
         )}
       </div>
 
       {/* Status */}
-      <div className="px-3 py-2.5 flex items-center justify-center relative" ref={statusRef}>
+      <div className="px-3 py-2.5 flex items-center justify-center">
         <button
-          onClick={() => setShowStatusMenu(!showStatusMenu)}
+          ref={status.triggerRef}
+          onClick={() => { status.updatePos('left', 144); status.setOpen(!status.open) }}
           className={cn(
             'px-2 py-0.5 rounded-full text-[11px] font-medium text-white whitespace-nowrap transition-opacity hover:opacity-80',
             STATUS_COLORS[task.status] || 'bg-gray-400'
@@ -141,19 +222,25 @@ export default function TaskRow({ task }) {
           {task.status}
         </button>
 
-        {showStatusMenu && (
-          <div className="absolute top-full z-50 mt-1 w-36 rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in">
-            {STATUS_OPTIONS.map(status => (
+        {status.open && createPortal(
+          <div
+            ref={status.dropdownRef}
+            className="fixed z-[200] w-40 rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in"
+            style={{ top: status.pos.top, left: status.pos.left }}
+          >
+            {STATUS_OPTIONS.map(s => (
               <button
-                key={status}
-                onClick={() => handleStatusChange(status)}
-                className="w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2"
+                key={s}
+                onClick={() => handleStatusChange(s)}
+                className="w-full px-2 py-1 text-left hover:bg-accent transition-colors flex items-center"
               >
-                <div className={cn('w-2.5 h-2.5 rounded-full', STATUS_COLORS[status])} />
-                {status}
+                <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium text-white w-full text-center', STATUS_COLORS[s])}>
+                  {s}
+                </span>
               </button>
             ))}
-          </div>
+          </div>,
+          document.body
         )}
       </div>
 
@@ -169,11 +256,12 @@ export default function TaskRow({ task }) {
       </div>
 
       {/* Priority */}
-      <div className="px-3 py-2.5 flex items-center justify-center relative" ref={priorityRef}>
+      <div className="px-3 py-2.5 flex items-center justify-center">
         <button
-          onClick={() => setShowPriorityMenu(!showPriorityMenu)}
+          ref={priority.triggerRef}
+          onClick={() => { priority.updatePos('left', 112); priority.setOpen(!priority.open) }}
           className={cn(
-            'px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap transition-opacity hover:opacity-80',
+            'px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity hover:opacity-80',
             priorityConfig.color,
             priorityConfig.textColor
           )}
@@ -181,46 +269,99 @@ export default function TaskRow({ task }) {
           {priorityConfig.label}
         </button>
 
-        {showPriorityMenu && (
-          <div className="absolute top-full z-50 mt-1 w-28 rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in">
-            {PRIORITY_OPTIONS.map(priority => (
+        {priority.open && createPortal(
+          <div
+            ref={priority.dropdownRef}
+            className="fixed z-[200] w-32 rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in"
+            style={{ top: priority.pos.top, left: priority.pos.left }}
+          >
+            {PRIORITY_OPTIONS.map(p => (
               <button
-                key={priority}
-                onClick={() => handlePriorityChange(priority)}
-                className="w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2"
+                key={p}
+                onClick={() => handlePriorityChange(p)}
+                className="w-full px-2 py-1 text-left hover:bg-accent transition-colors flex items-center"
               >
-                <div className={cn('w-2.5 h-2.5 rounded', PRIORITY_CONFIG[priority].color)} />
-                {PRIORITY_CONFIG[priority].label}
+                <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium w-full text-center', PRIORITY_CONFIG[p].color, PRIORITY_CONFIG[p].textColor)}>
+                  {PRIORITY_CONFIG[p].label}
+                </span>
               </button>
             ))}
-          </div>
+          </div>,
+          document.body
+        )}
+      </div>
+
+      {/* Sprint */}
+      <div className="px-2 py-2.5 flex items-center justify-center">
+        <button
+          ref={sprint.triggerRef}
+          onClick={() => { sprint.updatePos('left', 140); sprint.setOpen(!sprint.open) }}
+          className="px-2 py-0.5 rounded text-[11px] font-medium text-muted-foreground hover:bg-accent truncate max-w-[100px] transition-colors flex items-center gap-1.5"
+        >
+          <div
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{ backgroundColor: sprintObj?.color || '#9ca3af' }}
+          />
+          {sprintName || 'Backlog'}
+        </button>
+
+        {sprint.open && createPortal(
+          <div
+            ref={sprint.dropdownRef}
+            className="fixed z-[200] w-36 rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in"
+            style={{ top: sprint.pos.top, left: sprint.pos.left }}
+          >
+            <button
+              onClick={() => handleSprintChange(null)}
+              className={cn('w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2', !task.sprint_id && 'bg-accent/50')}
+            >
+              <div className="w-2 h-2 rounded-full bg-gray-400" />
+              Backlog
+            </button>
+            {state.sprints.map(s => (
+              <button
+                key={s.id}
+                onClick={() => handleSprintChange(s.id)}
+                className={cn('w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2', task.sprint_id === s.id && 'bg-accent/50')}
+              >
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color || '#6c5ce7' }} />
+                {s.name}
+              </button>
+            ))}
+          </div>,
+          document.body
         )}
       </div>
 
       {/* Actions */}
-      <div className="px-3 py-2.5 flex items-center justify-center relative" ref={menuRef}>
+      <div className="px-3 py-2.5 flex items-center justify-center">
         <button
-          onClick={() => setShowMenu(!showMenu)}
+          ref={actions.triggerRef}
+          onClick={() => { actions.updatePos('right', 160); actions.setOpen(!actions.open) }}
           className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
         >
           <MoreHorizontal className="w-4 h-4" />
         </button>
 
-        {showMenu && (
-          <div className="absolute top-full right-0 z-50 mt-1 w-40 rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in">
+        {actions.open && createPortal(
+          <div
+            ref={actions.dropdownRef}
+            className="fixed z-[200] w-40 rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in"
+            style={{ top: actions.pos.top, left: actions.pos.left }}
+          >
             <button
-              onClick={() => { openSidePanel(task); setShowMenu(false) }}
+              onClick={handleDuplicate}
               className="w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2"
             >
-              <Eye className="w-3.5 h-3.5" />
-              Ver detalles
+              <Copy className="w-3.5 h-3.5" />
+              Duplicar
             </button>
             <button
-              onClick={() => { openTaskModal(task); setShowMenu(false) }}
+              onClick={() => { openTask(task); actions.setOpen(false) }}
               className="w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2"
             >
               <Edit className="w-3.5 h-3.5" />
-              Editar tarea
+              Editar
             </button>
             <div className="h-px bg-border my-1" />
             <button
@@ -230,7 +371,8 @@ export default function TaskRow({ task }) {
               <Trash2 className="w-3.5 h-3.5" />
               Eliminar
             </button>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </div>

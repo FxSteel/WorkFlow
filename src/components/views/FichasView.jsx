@@ -17,7 +17,7 @@ const PRIORITY_CONFIG = {
 }
 
 export default function FichasView() {
-  const { state, openSidePanel, openTaskModal } = useApp()
+  const { state, openTask, openTaskModal } = useApp()
 
   return (
     <div className="flex-1 overflow-auto p-4">
@@ -28,7 +28,7 @@ export default function FichasView() {
           return (
             <div
               key={task.id}
-              onClick={() => openSidePanel(task)}
+              onClick={() => openTask(task)}
               className="bg-card border border-border rounded-xl p-4 cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all group"
             >
               {/* Status bar */}

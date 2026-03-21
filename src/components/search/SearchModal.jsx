@@ -23,7 +23,7 @@ const STATUS_COLORS = {
 }
 
 export default function SearchModal({ isOpen, onClose }) {
-  const { state, dispatch, openSidePanel } = useApp()
+  const { state, dispatch, openTask } = useApp()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState({ workspaces: [], boards: [], tasks: [] })
   const [loading, setLoading] = useState(false)
@@ -105,10 +105,10 @@ export default function SearchModal({ isOpen, onClose }) {
       if (item.data.boards) {
         dispatch({ type: 'SET_CURRENT_BOARD', payload: { id: item.data.board_id, name: item.data.boards.name, workspace_id: wsId } })
       }
-      openSidePanel(item.data)
+      openTask(item.data)
     }
     onClose()
-  }, [dispatch, state.workspaces, openSidePanel, onClose])
+  }, [dispatch, state.workspaces, openTask, onClose])
 
   // Keyboard navigation
   const handleKeyDown = (e) => {

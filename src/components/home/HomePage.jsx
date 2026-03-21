@@ -16,6 +16,7 @@ import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
+import HomeSkeleton from '../skeleton/HomeSkeleton'
 
 const PRIORITY_CONFIG = {
   critical: { label: 'Crítica', color: 'bg-red-500', text: 'text-white' },
@@ -115,6 +116,10 @@ export default function HomePage() {
     if (days === 1) return 'text-orange-500 bg-orange-500/10'
     if (days <= 3) return 'text-yellow-500 bg-yellow-500/10'
     return 'text-muted-foreground bg-muted'
+  }
+
+  if (loadingTasks && recentBoards.length === 0) {
+    return <HomeSkeleton />
   }
 
   return (
