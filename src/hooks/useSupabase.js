@@ -22,7 +22,7 @@ export function useSupabase() {
       .select('*')
       .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: true })
-    if (!error && data) dispatch({ type: 'SET_BOARDS', payload: data })
+    if (!error && data) dispatch({ type: 'MERGE_BOARDS', payload: { workspaceId, boards: data } })
     return { data, error }
   }, [dispatch])
 
@@ -54,29 +54,6 @@ export function useSupabase() {
       .order('name', { ascending: true })
 
     if (!error && data) {
-      // Auto-add current user as member if not present
-      const { data: authData } = await supabase.auth.getUser()
-      const currentUserId = authData?.user?.id
-      if (currentUserId && !data.find(m => m.user_id === currentUserId)) {
-        const userName = authData.user.user_metadata?.full_name
-          || authData.user.email?.split('@')[0]
-          || 'Usuario'
-        const { data: newMember } = await supabase
-          .from('members')
-          .insert({
-            workspace_id: workspaceId,
-            user_id: currentUserId,
-            name: userName,
-            email: authData.user.email || '',
-            role: 'admin',
-            color: '#000000',
-          })
-          .select()
-          .single()
-        if (newMember) {
-          data.push(newMember)
-        }
-      }
       dispatch({ type: 'SET_MEMBERS', payload: data })
     }
     return { data, error }

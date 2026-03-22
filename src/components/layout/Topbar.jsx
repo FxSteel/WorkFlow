@@ -3,7 +3,7 @@ import { Sun, Moon, Filter, SortAsc, Plus, LogOut, User, Settings, ChevronRight,
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
 import { useApp } from '../../context/AppContext'
-import InviteNotifications from '../workspace/InviteNotifications'
+import NotificationCenter from '../workspace/NotificationCenter'
 import StatusAvatar, { STATUS_CONFIG } from '../ui/StatusAvatar'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
@@ -24,7 +24,7 @@ const STATUS_DESCRIPTIONS = {
   invisible: 'Aparecerás como desconectado',
 }
 
-export default function Topbar({ onNewTask, onNewSprint, onOpenSettings }) {
+export default function Topbar({ onNewTask, onNewSprint, onOpenSettings, onOpenProfile }) {
   const { theme, toggleTheme } = useTheme()
   const { user, signOut } = useAuth()
   const { state } = useApp()
@@ -148,7 +148,7 @@ export default function Topbar({ onNewTask, onNewSprint, onOpenSettings }) {
 
         <div className="w-px h-6 bg-border mx-1" />
 
-        <InviteNotifications />
+        <NotificationCenter />
 
         <button
           onClick={toggleTheme}
@@ -257,7 +257,10 @@ export default function Topbar({ onNewTask, onNewSprint, onOpenSettings }) {
 
               {/* Actions */}
               <div className="py-1">
-                <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors">
+                <button
+                  onClick={() => { onOpenProfile?.(); setShowUserMenu(false) }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+                >
                   <User className="w-4 h-4 text-muted-foreground" />
                   Mi perfil
                 </button>

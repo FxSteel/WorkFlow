@@ -6,7 +6,9 @@ import {
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
+import { supabaseAdmin } from '../../lib/supabase-admin'
 import { cn } from '../../lib/utils'
+import { toast } from 'sonner'
 
 const ROLE_OPTIONS = [
   { value: 'member', label: 'Miembro', description: 'Puede ver y editar tareas' },
@@ -34,6 +36,8 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
     if (isOpen && workspace) {
       fetchInvites(workspace.id)
       fetchMembers(workspace.id)
+      setError('')
+      setSuccess('')
     }
   }, [isOpen, workspace])
 
@@ -73,9 +77,12 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
     }
 
     setSending(true)
+    const inviteEmail = email.trim().toLowerCase()
+
+    // 1. Save invite record in DB
     const { error: inviteError } = await createInvite({
       workspace_id: workspace.id,
-      email: email.trim().toLowerCase(),
+      email: inviteEmail,
       role,
       invited_by: user.id,
       invited_by_name: user.user_metadata?.full_name || user.email,
@@ -84,12 +91,50 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
 
     if (inviteError) {
       setError(inviteError.message)
-    } else {
-      setSuccess(`Invitación enviada a ${email}`)
-      setEmail('')
-      setRole('member')
-      fetchInvites(workspace.id)
+      setSending(false)
+      return
     }
+
+    // 2. Send invite email via Supabase Admin (inviteUserByEmail)
+    if (supabaseAdmin) {
+      const senderName = user.user_metadata?.full_name || user.email
+      const senderInitials = senderName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+
+      const { error: inviteEmailError } = await supabaseAdmin.auth.admin.inviteUserByEmail(inviteEmail, {
+        redirectTo: window.location.origin,
+        data: {
+          invited_to_workspace: workspace.name,
+          invited_by: senderName,
+          invited_by_initials: senderInitials,
+        },
+      })
+
+      if (inviteEmailError) {
+        // If user already exists, that's fine — invite is saved
+        if (inviteEmailError.message?.includes('already been registered')) {
+          const msg = `Invitación enviada a ${inviteEmail} (ya tiene cuenta)`
+          setSuccess(msg)
+          toast.success(msg)
+        } else {
+          const msg = `Invitación guardada para ${inviteEmail} (el correo no pudo enviarse)`
+          setSuccess(msg)
+          toast.success(msg)
+        }
+      } else {
+        const msg = `Invitación enviada a ${inviteEmail}`
+        setSuccess(msg)
+        toast.success(msg)
+      }
+    } else {
+      const msg = `Invitación guardada para ${inviteEmail}`
+      setSuccess(msg)
+      toast.success(msg)
+    }
+    setTimeout(() => setSuccess(''), 3000)
+
+    setEmail('')
+    setRole('member')
+    fetchInvites(workspace.id)
     setSending(false)
   }
 
@@ -132,8 +177,8 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
         <div className="flex border-b border-border">
           {[
             { id: 'invite', label: 'Invitar', icon: UserPlus },
-            { id: 'members', label: `Miembros (${state.members.length})`, icon: Users },
             { id: 'pending', label: `Pendientes (${pendingInvites.length})`, icon: Clock },
+            { id: 'members', label: `Miembros (${state.members.length})`, icon: Users },
           ].map(tab => (
             <button
               key={tab.id}
@@ -252,25 +297,13 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
                 </div>
               ) : (
                 <div className="space-y-1">
-                  {/* Owner */}
-                  {workspace.owner_id && (
-                    <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/5 border border-primary/10">
-                      <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-xs font-semibold text-primary-foreground">
-                        {(user?.user_metadata?.full_name || user?.email)?.[0]?.toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {user?.user_metadata?.full_name || user?.email?.split('@')[0]}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-                      </div>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary">
-                        Owner
-                      </span>
-                    </div>
-                  )}
-                  {state.members.map(member => (
-                    <div key={member.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-accent/50 transition-colors">
+                  {state.members.map(member => {
+                    const isOwner = member.user_id === workspace.owner_id
+                    return (
+                    <div key={member.id} className={cn(
+                      'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors',
+                      isOwner ? 'bg-primary/5 border border-primary/10' : 'hover:bg-accent/50'
+                    )}>
                       <div
                         className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white"
                         style={{ backgroundColor: member.color || '#6c5ce7' }}
@@ -281,11 +314,15 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
                         <p className="text-sm font-medium text-foreground truncate">{member.name}</p>
                         <p className="text-xs text-muted-foreground truncate">{member.email}</p>
                       </div>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground capitalize">
-                        {member.role || 'member'}
+                      <span className={cn(
+                        'px-2 py-0.5 rounded-full text-[10px] font-medium capitalize',
+                        isOwner ? 'bg-primary/10 text-primary font-semibold' : 'bg-muted text-muted-foreground'
+                      )}>
+                        {isOwner ? 'Owner' : member.role || 'member'}
                       </span>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>

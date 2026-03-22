@@ -1,14 +1,7 @@
 import { useMemo } from 'react'
 import { useApp } from '../../context/AppContext'
 import { cn } from '../../lib/utils'
-
-const STATUS_COLORS = {
-  'Por hacer': 'bg-gray-400',
-  'En progreso': 'bg-blue-500',
-  'En revisión': 'bg-yellow-500',
-  'Completado': 'bg-emerald-500',
-  'Bloqueado': 'bg-red-500',
-}
+import { STATUS_COLORS } from '../../lib/constants'
 
 export default function CronogramaView() {
   const { state, openTask } = useApp()

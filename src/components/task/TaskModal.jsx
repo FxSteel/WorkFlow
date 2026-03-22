@@ -6,22 +6,8 @@ import { useSupabase } from '../../hooks/useSupabase'
 import DatePicker from '../ui/DatePicker'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select'
 import { cn } from '../../lib/utils'
-
-const STATUS_OPTIONS = ['Por hacer', 'En progreso', 'En revisión', 'Completado', 'Bloqueado']
-const STATUS_COLORS = {
-  'Por hacer': 'bg-gray-400',
-  'En progreso': 'bg-blue-500',
-  'En revisión': 'bg-yellow-500',
-  'Completado': 'bg-emerald-500',
-  'Bloqueado': 'bg-red-500',
-}
-
-const PRIORITY_OPTIONS = [
-  { value: 'critical', label: 'Crítica', color: 'bg-red-500' },
-  { value: 'high', label: 'Alta', color: 'bg-orange-500' },
-  { value: 'medium', label: 'Media', color: 'bg-yellow-500' },
-  { value: 'low', label: 'Baja', color: 'bg-blue-500' },
-]
+import { STATUS_OPTIONS, STATUS_COLORS, PRIORITY_OPTIONS } from '../../lib/constants'
+import { toast } from 'sonner'
 
 export default function TaskModal() {
   const { state, closeTaskModal } = useApp()
@@ -37,9 +23,8 @@ export default function TaskModal() {
       id: m.id,
       name: m.name,
       email: m.email,
-      avatar: m.user_id === user?.id ? user?.user_metadata?.avatar_url : null,
+      avatar: m.avatar_url || (m.user_id === user?.id ? user?.user_metadata?.avatar_url : null),
       color: m.color || '#6c5ce7',
-      isCurrentUser: m.user_id === user?.id,
     }))
   }, [user, state.members])
 
@@ -88,8 +73,10 @@ export default function TaskModal() {
         board_id: state.currentBoard.id,
         position: state.tasks.length,
       })
+      toast.success('Tarea creada')
     } else {
       await updateTask(task.id, payload)
+      toast.success('Cambios guardados')
     }
     closeTaskModal()
   }

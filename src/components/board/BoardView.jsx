@@ -13,6 +13,7 @@ import FichasView from '../views/FichasView'
 import CronogramaView from '../views/CronogramaView'
 import { cn } from '../../lib/utils'
 import BoardSkeleton from '../skeleton/BoardSkeleton'
+import { toast } from 'sonner'
 
 export default function BoardView() {
   const { state, openTaskModal } = useApp()
@@ -203,6 +204,7 @@ function TableView({
   const handleRenameSprint = async (sprintId) => {
     if (editSprintName.trim()) {
       await updateSprint(sprintId, { name: editSprintName.trim() })
+      toast.success('Sprint renombrado')
     }
     setEditingSprint(null)
     setEditSprintName('')
@@ -210,6 +212,7 @@ function TableView({
 
   const handleDeleteSprint = async (sprintId) => {
     await deleteSprint(sprintId)
+    toast.success('Sprint eliminado')
     setDeleteSprintConfirm(null)
   }
 
@@ -217,7 +220,7 @@ function TableView({
     await updateSprint(sprintId, { [field]: value || null })
   }
 
-  const backlogTasks = state.tasks.filter(t => !t.sprint_id)
+  const backlogTasks = state.tasks.filter(t => t.status === 'Backlog' || !t.sprint_id)
 
   return (
     <div className="flex-1 overflow-auto p-4">
@@ -421,12 +424,22 @@ function TableView({
           onDrop={(e) => handleSprintDrop(e, null)}
         >
           <div className="flex items-center gap-2 mb-2">
+            <button
+              onClick={() => toggleSprint('_backlog')}
+              className="p-0.5 rounded hover:bg-accent transition-colors"
+            >
+              {collapsedSprints._backlog
+                ? <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                : <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              }
+            </button>
             <div className="w-3 h-3 rounded-full bg-muted-foreground" />
             <h3 className="font-semibold text-sm text-foreground">Backlog</h3>
             <span className="text-xs text-muted-foreground">
               {backlogTasks.length} tareas
             </span>
           </div>
+          {!collapsedSprints._backlog && (
           <div className="rounded-lg border border-border overflow-hidden bg-card">
             <div className="grid grid-cols-[minmax(250px,2fr)_120px_110px_110px_100px_100px_70px] gap-0 bg-muted/50 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider">
               <div className="px-3 py-2">Tarea</div>
@@ -472,6 +485,7 @@ function TableView({
               </button>
             )}
           </div>
+          )}
         </div>
       )}
 

@@ -3,21 +3,16 @@ import { Plus } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import { cn } from '../../lib/utils'
+import { STATUS_COLORS, PRIORITY_CONFIG } from '../../lib/constants'
 
 const COLUMNS = [
+  { status: 'Backlog', color: 'bg-gray-500', border: 'border-t-gray-500', dropBg: 'bg-gray-500/10' },
   { status: 'Por hacer', color: 'bg-gray-400', border: 'border-t-gray-400', dropBg: 'bg-gray-400/10' },
   { status: 'En progreso', color: 'bg-blue-500', border: 'border-t-blue-500', dropBg: 'bg-blue-500/10' },
   { status: 'En revisión', color: 'bg-yellow-500', border: 'border-t-yellow-500', dropBg: 'bg-yellow-500/10' },
   { status: 'Completado', color: 'bg-emerald-500', border: 'border-t-emerald-500', dropBg: 'bg-emerald-500/10' },
   { status: 'Bloqueado', color: 'bg-red-500', border: 'border-t-red-500', dropBg: 'bg-red-500/10' },
 ]
-
-const PRIORITY_CONFIG = {
-  critical: { label: 'Crítica', color: 'bg-red-500', text: 'text-white' },
-  high: { label: 'Alta', color: 'bg-orange-500', text: 'text-white' },
-  medium: { label: 'Media', color: 'bg-yellow-500', text: 'text-black' },
-  low: { label: 'Baja', color: 'bg-blue-500', text: 'text-white' },
-}
 
 export default function KanbanView() {
   const { state, openTask } = useApp()
@@ -159,14 +154,24 @@ export default function KanbanView() {
                           </span>
                         )}
                       </div>
-                      {task.assignee_name && (
-                        <div className="flex items-center gap-1.5 mt-2">
-                          <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-semibold text-primary">
-                            {task.assignee_name[0]?.toUpperCase()}
+                      {task.assignee_name && (() => {
+                        const member = state.members.find(m => m.id === task.assignee_id)
+                        return (
+                          <div className="flex items-center gap-1.5 mt-2">
+                            {member?.avatar_url ? (
+                              <img src={member.avatar_url} alt="" className="w-5 h-5 rounded-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <div
+                                className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
+                                style={{ backgroundColor: member?.color || 'hsl(var(--primary))' }}
+                              >
+                                {task.assignee_name[0]?.toUpperCase()}
+                              </div>
+                            )}
+                            <span className="text-[11px] text-muted-foreground">{task.assignee_name}</span>
                           </div>
-                          <span className="text-[11px] text-muted-foreground">{task.assignee_name}</span>
-                        </div>
-                      )}
+                        )
+                      })()}
                     </div>
                   )
                 })}

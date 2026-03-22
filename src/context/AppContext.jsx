@@ -27,6 +27,12 @@ function appReducer(state, action) {
       return { ...state, currentWorkspace: action.payload }
     case 'SET_BOARDS':
       return { ...state, boards: action.payload }
+    case 'MERGE_BOARDS': {
+      // Replace boards for a specific workspace, keep others
+      const { workspaceId, boards: newBoards } = action.payload
+      const otherBoards = state.boards.filter(b => b.workspace_id !== workspaceId)
+      return { ...state, boards: [...otherBoards, ...newBoards] }
+    }
     case 'SET_CURRENT_BOARD':
       return { ...state, currentBoard: action.payload }
     case 'SET_SPRINTS':

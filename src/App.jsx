@@ -13,8 +13,11 @@ import SprintModal from './components/sprint/SprintModal'
 import InviteModal from './components/workspace/InviteModal'
 import SearchModal from './components/search/SearchModal'
 import SettingsModal from './components/settings/SettingsModal'
+import ProfileModal from './components/settings/ProfileModal'
 import AuthPage from './components/auth/AuthPage'
+import SetupPassword from './components/auth/SetupPassword'
 import { Loader2 } from 'lucide-react'
+import { Toaster } from 'sonner'
 
 function getTaskEditorPref() {
   return localStorage.getItem('workflow-task-editor-view') || 'sidebar'
@@ -27,11 +30,17 @@ function AppContent() {
   const [showSprintModal, setShowSprintModal] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
   const [inviteModal, setInviteModal] = useState({ open: false, workspace: null })
 
   useEffect(() => {
     fetchWorkspaces()
   }, [])
+
+  // Fetch boards for all workspaces on load
+  useEffect(() => {
+    state.workspaces.forEach(ws => fetchBoards(ws.id))
+  }, [state.workspaces])
 
   useEffect(() => {
     if (state.currentWorkspace) {
@@ -87,6 +96,7 @@ function AppContent() {
           onNewTask={handleNewTask}
           onNewSprint={() => setShowSprintModal(true)}
           onOpenSettings={() => setShowSettings(true)}
+          onOpenProfile={() => setShowProfile(true)}
         />
         <BoardView />
       </div>
@@ -104,12 +114,13 @@ function AppContent() {
       />
       <SearchModal isOpen={showSearch} onClose={() => setShowSearch(false)} />
       <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      <ProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} />
     </div>
   )
 }
 
 function AuthenticatedApp() {
-  const { user, loading } = useAuth()
+  const { user, loading, needsPassword } = useAuth()
 
   if (loading) {
     return (
@@ -126,6 +137,10 @@ function AuthenticatedApp() {
     return <AuthPage />
   }
 
+  if (needsPassword) {
+    return <SetupPassword />
+  }
+
   return (
     <AppProvider>
       <AppContent />
@@ -138,6 +153,14 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <AuthenticatedApp />
+        <Toaster
+          position="bottom-center"
+          toastOptions={{
+            className: '!bg-card !text-foreground !border-border !shadow-lg',
+            duration: 3000,
+          }}
+          richColors
+        />
       </AuthProvider>
     </ThemeProvider>
   )

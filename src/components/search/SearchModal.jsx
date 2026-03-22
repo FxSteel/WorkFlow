@@ -6,21 +6,7 @@ import {
 import { useApp } from '../../context/AppContext'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
-
-const PRIORITY_CONFIG = {
-  critical: { label: 'Crítica', color: 'bg-red-500' },
-  high: { label: 'Alta', color: 'bg-orange-500' },
-  medium: { label: 'Media', color: 'bg-yellow-500' },
-  low: { label: 'Baja', color: 'bg-blue-500' },
-}
-
-const STATUS_COLORS = {
-  'Por hacer': 'bg-gray-400',
-  'En progreso': 'bg-blue-500',
-  'En revisión': 'bg-yellow-500',
-  'Completado': 'bg-emerald-500',
-  'Bloqueado': 'bg-red-500',
-}
+import { PRIORITY_CONFIG, STATUS_COLORS } from '../../lib/constants'
 
 export default function SearchModal({ isOpen, onClose }) {
   const { state, dispatch, openTask } = useApp()

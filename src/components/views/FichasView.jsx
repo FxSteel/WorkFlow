@@ -1,20 +1,6 @@
 import { useApp } from '../../context/AppContext'
 import { cn } from '../../lib/utils'
-
-const STATUS_COLORS = {
-  'Por hacer': 'bg-gray-400',
-  'En progreso': 'bg-blue-500',
-  'En revisión': 'bg-yellow-500',
-  'Completado': 'bg-emerald-500',
-  'Bloqueado': 'bg-red-500',
-}
-
-const PRIORITY_CONFIG = {
-  critical: { label: 'Crítica', color: 'bg-red-500', text: 'text-white' },
-  high: { label: 'Alta', color: 'bg-orange-500', text: 'text-white' },
-  medium: { label: 'Media', color: 'bg-yellow-500', text: 'text-black' },
-  low: { label: 'Baja', color: 'bg-blue-500', text: 'text-white' },
-}
+import { STATUS_COLORS, PRIORITY_CONFIG } from '../../lib/constants'
 
 export default function FichasView() {
   const { state, openTask, openTaskModal } = useApp()
@@ -57,14 +43,24 @@ export default function FichasView() {
 
               {/* Footer */}
               <div className="flex items-center justify-between pt-2 border-t border-border">
-                {task.assignee_name ? (
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-semibold text-primary">
-                      {task.assignee_name[0]?.toUpperCase()}
+                {task.assignee_name ? (() => {
+                  const member = state.members.find(m => m.id === task.assignee_id)
+                  return (
+                    <div className="flex items-center gap-1.5">
+                      {member?.avatar_url ? (
+                        <img src={member.avatar_url} alt="" className="w-5 h-5 rounded-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        <div
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
+                          style={{ backgroundColor: member?.color || 'hsl(var(--primary))' }}
+                        >
+                          {task.assignee_name[0]?.toUpperCase()}
+                        </div>
+                      )}
+                      <span className="text-[11px] text-muted-foreground">{task.assignee_name}</span>
                     </div>
-                    <span className="text-[11px] text-muted-foreground">{task.assignee_name}</span>
-                  </div>
-                ) : (
+                  )
+                })() : (
                   <span className="text-[11px] text-muted-foreground">Sin asignar</span>
                 )}
                 {task.due_date && (

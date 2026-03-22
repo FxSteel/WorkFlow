@@ -7,6 +7,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [needsPassword, setNeedsPassword] = useState(false)
 
   useEffect(() => {
     // Get initial session
@@ -18,12 +19,27 @@ export function AuthProvider({ children }) {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
         setSession(session)
         setUser(session?.user ?? null)
         setLoading(false)
+
+        // Detect invited user who needs to set password
+        if (event === 'SIGNED_IN' && session?.user) {
+          const isInvited = session.user.app_metadata?.invited
+          const hasNoPassword = !session.user.user_metadata?.password_set
+          if (isInvited || window.location.hash.includes('type=invite')) {
+            setNeedsPassword(true)
+          }
+        }
       }
     )
+
+    // Check URL for invite token on load
+    const hash = window.location.hash
+    if (hash.includes('type=invite') || hash.includes('type=recovery')) {
+      // Supabase will handle the token automatically
+    }
 
     return () => subscription.unsubscribe()
   }, [])
@@ -69,16 +85,28 @@ export function AuthProvider({ children }) {
     return { data, error }
   }
 
+  const updatePassword = async (password) => {
+    const { data, error } = await supabase.auth.updateUser({
+      password,
+      data: { password_set: true },
+    })
+    if (!error) setNeedsPassword(false)
+    return { data, error }
+  }
+
   return (
     <AuthContext.Provider value={{
       user,
       session,
       loading,
+      needsPassword,
       signUp,
       signIn,
       signInWithGoogle,
       signOut,
       resetPassword,
+      updatePassword,
+      setNeedsPassword,
     }}>
       {children}
     </AuthContext.Provider>

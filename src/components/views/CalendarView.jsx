@@ -2,17 +2,10 @@ import { useState, useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { cn } from '../../lib/utils'
+import { STATUS_COLORS } from '../../lib/constants'
 
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-
-const STATUS_COLORS = {
-  'Por hacer': 'bg-gray-400',
-  'En progreso': 'bg-blue-500',
-  'En revisión': 'bg-yellow-500',
-  'Completado': 'bg-emerald-500',
-  'Bloqueado': 'bg-red-500',
-}
 
 export default function CalendarView() {
   const { state, openTask } = useApp()

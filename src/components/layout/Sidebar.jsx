@@ -22,6 +22,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import { cn } from '../../lib/utils'
 import SidebarSkeleton from '../skeleton/SidebarSkeleton'
+import { toast } from 'sonner'
 
 const WORKSPACE_COLORS = [
   '#6c5ce7', '#0984e3', '#00b894', '#e17055', '#fdcb6e',
@@ -32,7 +33,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
   const { state, dispatch } = useApp()
   const { user } = useAuth()
   const {
-    createWorkspace, createBoard, deleteWorkspace, updateWorkspace,
+    createWorkspace, createBoard, deleteWorkspace, updateWorkspace, fetchBoards,
     deleteBoard, updateBoard,
   } = useSupabase()
   const [expandedWorkspaces, setExpandedWorkspaces] = useState({})
@@ -49,14 +50,18 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
   const [editName, setEditName] = useState('')
   const [colorPicker, setColorPicker] = useState(null)
   const [workspacesLoaded, setWorkspacesLoaded] = useState(false)
+  const loadingStarted = useRef(false)
   const ctxRef = useRef(null)
 
-  // Track when workspaces have been loaded at least once
+  // Track when workspaces fetch completes (loading: false→true→false)
   useEffect(() => {
-    if (state.workspaces.length > 0) {
+    if (state.loading) {
+      loadingStarted.current = true
+    }
+    if (!state.loading && loadingStarted.current) {
       setWorkspacesLoaded(true)
     }
-  }, [state.workspaces])
+  }, [state.loading])
 
   // Close context menu
   useEffect(() => {
@@ -109,6 +114,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
 
   const handleDeleteWorkspace = async (id) => {
     await deleteWorkspace(id)
+    toast.success('Espacio eliminado')
     setDeleteConfirm(null)
     setCtxMenu(null)
   }
@@ -128,6 +134,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
 
   const handleDeleteBoard = async (id) => {
     await deleteBoard(id)
+    toast.success('Tablero eliminado')
     setDeleteConfirm(null)
     setCtxMenu(null)
   }
@@ -147,9 +154,18 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
     } else {
       await updateBoard(editingId, { name: editName.trim() })
     }
+    toast.success('Nombre actualizado')
     setEditingId(null)
     setEditingType(null)
     setEditName('')
+  }
+
+  const toggleAndFetchWorkspace = (workspace) => {
+    toggleWorkspace(workspace.id)
+    // Fetch boards for this workspace when expanding
+    if (!expandedWorkspaces[workspace.id]) {
+      fetchBoards(workspace.id)
+    }
   }
 
   const selectWorkspace = (workspace) => {
@@ -158,6 +174,9 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
   }
 
   const selectBoard = (board) => {
+    // Also set the workspace when selecting a board
+    const workspace = state.workspaces.find(w => w.id === board.workspace_id)
+    if (workspace) dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: workspace })
     dispatch({ type: 'SET_CURRENT_BOARD', payload: board })
   }
 
@@ -267,7 +286,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
                 >
                   <div
                     className="flex-1 flex items-center gap-2 min-w-0"
-                    onClick={() => { selectWorkspace(workspace); toggleWorkspace(workspace.id) }}
+                    onClick={() => toggleAndFetchWorkspace(workspace)}
                   >
                     {!collapsed && (
                       expandedWorkspaces[workspace.id]
@@ -473,7 +492,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
                 <CtxMenuItem
                   icon={Copy}
                   label="Copiar ID"
-                  onClick={() => { navigator.clipboard.writeText(ctxMenu.id); setCtxMenu(null) }}
+                  onClick={() => { navigator.clipboard.writeText(ctxMenu.id); toast.success('ID copiado'); setCtxMenu(null) }}
                 />
               </>
             )}
@@ -483,7 +502,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
               <CtxMenuItem
                 icon={Copy}
                 label="Copiar ID"
-                onClick={() => { navigator.clipboard.writeText(ctxMenu.id); setCtxMenu(null) }}
+                onClick={() => { navigator.clipboard.writeText(ctxMenu.id); toast.success('ID copiado'); setCtxMenu(null) }}
               />
             )}
           </div>

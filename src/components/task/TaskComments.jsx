@@ -1,13 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Paperclip, AtSign, Send, Loader2, X, FileText, Image as ImageIcon } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useApp } from '../../context/AppContext'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
+import { useNotifications } from '../../hooks/useNotifications'
+import { toast } from 'sonner'
 
 export default function TaskComments({ taskId }) {
   const { user } = useAuth()
   const { state } = useApp()
+  const { notifyMention, notifyComment } = useNotifications()
   const [comments, setComments] = useState([])
   const [loading, setLoading] = useState(true)
   const [text, setText] = useState('')
@@ -153,14 +157,13 @@ export default function TaskComments({ taskId }) {
       }
     }
 
-    // Extract @mentions
+    // Extract @mentions by matching member names in the text
     const mentions = []
-    const mentionRegex = /@(\S+)/g
-    let match
-    while ((match = mentionRegex.exec(text)) !== null) {
-      const member = state.members.find(m => m.name === match[1])
-      if (member) mentions.push({ id: member.id, name: member.name })
-    }
+    state.members.forEach(member => {
+      if (text.includes(`@${member.name}`)) {
+        mentions.push({ id: member.id, name: member.name })
+      }
+    })
 
     const { error } = await supabase.from('task_comments').insert({
       task_id: taskId,
@@ -172,7 +175,34 @@ export default function TaskComments({ taskId }) {
       mentions: mentions.length > 0 ? JSON.stringify(mentions) : null,
     })
 
+    if (error) {
+      toast.error('Error al publicar comentario')
+    }
+
     if (!error) {
+      toast.success('Comentario publicado')
+      // Send notifications for @mentions
+      for (const mentioned of mentions) {
+        const member = state.members.find(m => m.id === mentioned.id)
+        const task = state.tasks.find(t => t.id === taskId)
+        if (member) {
+          notifyMention({
+            mentionedMember: member,
+            taskTitle: task?.title || '',
+            taskId,
+            fromUser: user,
+            workspaceId: state.currentWorkspace?.id,
+          })
+        }
+      }
+
+      // Notify task assignee about comment (if not the commenter)
+      const task = state.tasks.find(t => t.id === taskId)
+      if (task?.assignee_id) {
+        const assigneeMember = state.members.find(m => m.id === task.assignee_id)
+        notifyComment({ task, fromUser: user, workspaceId: state.currentWorkspace?.id, assigneeMember })
+      }
+
       setText('')
       setAttachments([])
       fetchComments()
@@ -192,11 +222,17 @@ export default function TaskComments({ taskId }) {
   }
 
   const renderContent = (content) => {
-    // Highlight @mentions
-    return content.split(/(@\S+)/g).map((part, i) => {
-      if (part.startsWith('@')) {
+    // Build regex from member names to match full names after @
+    const memberNames = state.members.map(m => m.name).filter(Boolean).sort((a, b) => b.length - a.length)
+    if (memberNames.length === 0) return content
+
+    const pattern = new RegExp(`(@(?:${memberNames.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')}))`, 'g')
+    const parts = content.split(pattern)
+
+    return parts.map((part, i) => {
+      if (part.startsWith('@') && memberNames.some(n => part === `@${n}`)) {
         return (
-          <span key={i} className="text-primary font-medium bg-primary/10 rounded px-0.5">
+          <span key={i} className="inline-flex items-center gap-0.5 bg-blue-500/20 text-blue-500 dark:text-blue-400 font-medium rounded-full px-1.5 py-0 text-[13px]">
             {part}
           </span>
         )
@@ -222,12 +258,18 @@ export default function TaskComments({ taskId }) {
         <div className="space-y-4 mb-4">
           {comments.map(comment => {
             const files = comment.attachments ? JSON.parse(comment.attachments) : []
+            const commentMember = state.members.find(m => m.user_id === comment.user_id)
+            const commentAvatar = commentMember?.avatar_url || comment.user_avatar
+            const commentColor = commentMember?.color || '#6c5ce7'
             return (
               <div key={comment.id} className="flex items-start gap-2.5">
-                {comment.user_avatar ? (
-                  <img src={comment.user_avatar} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
+                {commentAvatar ? (
+                  <img src={commentAvatar} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
                 ) : (
-                  <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-[10px] font-semibold text-primary-foreground shrink-0">
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold text-white shrink-0"
+                    style={{ backgroundColor: commentColor }}
+                  >
                     {comment.user_name?.[0]?.toUpperCase()}
                   </div>
                 )}
@@ -295,7 +337,7 @@ export default function TaskComments({ taskId }) {
           )}
 
           {/* Text input with mentions */}
-          <div className="relative" ref={mentionRef}>
+          <div ref={mentionRef}>
             <textarea
               ref={inputRef}
               value={text}
@@ -305,32 +347,56 @@ export default function TaskComments({ taskId }) {
               rows={2}
               className="w-full px-3 py-2 text-sm text-foreground bg-transparent focus:outline-none placeholder:text-muted-foreground resize-none"
             />
+          </div>
 
-            {/* Mentions dropdown */}
-            {showMentions && filteredMembers.length > 0 && (
-              <div className="absolute bottom-full left-0 mb-1 w-48 rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in z-50">
-                {filteredMembers.map((member, i) => (
-                  <button
-                    key={member.id}
-                    onMouseDown={(e) => { e.preventDefault(); insertMention(member) }}
-                    onMouseEnter={() => setMentionIndex(i)}
-                    className={cn(
-                      'w-full flex items-center gap-2 px-3 py-1.5 text-sm transition-colors',
-                      mentionIndex === i ? 'bg-accent' : 'hover:bg-accent/50'
-                    )}
-                  >
+          {/* Mentions dropdown - portal */}
+          {showMentions && filteredMembers.length > 0 && createPortal(
+            <div
+              ref={mentionRef}
+              className="fixed z-[200] w-72 max-h-64 overflow-y-auto rounded-xl border border-border bg-popover shadow-xl animate-scale-in"
+              style={{
+                left: (() => {
+                  const r = inputRef.current?.getBoundingClientRect()
+                  return r ? Math.min(r.left, window.innerWidth - 290) : 0
+                })(),
+                top: (() => {
+                  const r = inputRef.current?.getBoundingClientRect()
+                  return r ? r.top - Math.min(filteredMembers.length * 44 + 32, 260) - 8 : 0
+                })(),
+              }}
+            >
+              <div className="px-3 py-2 border-b border-border">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Miembros</span>
+              </div>
+              {filteredMembers.map((member, i) => (
+                <button
+                  key={member.id}
+                  onMouseDown={(e) => { e.preventDefault(); insertMention(member) }}
+                  onMouseEnter={() => setMentionIndex(i)}
+                  className={cn(
+                    'w-full flex items-center gap-3 px-3 py-2 transition-colors',
+                    mentionIndex === i ? 'bg-accent' : 'hover:bg-accent/50'
+                  )}
+                >
+                  {member.avatar_url ? (
+                    <img src={member.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
+                  ) : (
                     <div
-                      className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
                       style={{ backgroundColor: member.color || '#6c5ce7' }}
                     >
                       {member.name[0]?.toUpperCase()}
                     </div>
-                    <span className="text-foreground truncate">{member.name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+                  )}
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className="text-sm font-medium text-foreground truncate">{member.name}</p>
+                    {member.email && <p className="text-[11px] text-muted-foreground truncate">{member.email}</p>}
+                  </div>
+                </button>
+              ))}
+            </div>,
+            document.body
+          )}
 
           {/* Toolbar */}
           <div className="flex items-center justify-between px-2 py-1.5 border-t border-border">

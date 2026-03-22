@@ -16,25 +16,11 @@ import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
+import { PRIORITY_CONFIG, STATUS_COLORS } from '../../lib/constants'
 import HomeSkeleton from '../skeleton/HomeSkeleton'
 
-const PRIORITY_CONFIG = {
-  critical: { label: 'Crítica', color: 'bg-red-500', text: 'text-white' },
-  high: { label: 'Alta', color: 'bg-orange-500', text: 'text-white' },
-  medium: { label: 'Media', color: 'bg-yellow-500', text: 'text-black' },
-  low: { label: 'Baja', color: 'bg-blue-500', text: 'text-white' },
-}
-
-const STATUS_COLORS = {
-  'Por hacer': 'bg-gray-400',
-  'En progreso': 'bg-blue-500',
-  'En revisión': 'bg-yellow-500',
-  'Completado': 'bg-emerald-500',
-  'Bloqueado': 'bg-red-500',
-}
-
 export default function HomePage() {
-  const { state, dispatch } = useApp()
+  const { state, dispatch, openTask } = useApp()
   const { user } = useAuth()
   const [upcomingTasks, setUpcomingTasks] = useState([])
   const [recentBoards, setRecentBoards] = useState([])
@@ -259,12 +245,19 @@ export default function HomePage() {
                   return (
                     <div
                       key={task.id}
-                      className="grid grid-cols-[1fr_140px_100px_100px_90px] gap-0 border-b border-border last:border-b-0 hover:bg-accent/30 transition-colors text-sm"
+                      className="grid grid-cols-[1fr_140px_100px_100px_90px] gap-0 border-b border-border last:border-b-0 hover:bg-accent/30 transition-colors text-sm cursor-pointer"
+                      onClick={() => {
+                        const wsId = task.boards?.workspace_id
+                        const ws = state.workspaces.find(w => w.id === wsId)
+                        if (ws) dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: ws })
+                        if (task.boards) dispatch({ type: 'SET_CURRENT_BOARD', payload: { id: task.board_id, name: task.boards.name, workspace_id: wsId } })
+                        openTask(task)
+                      }}
                     >
                       {/* Task title */}
                       <div className="px-4 py-3 flex items-center gap-2 min-w-0">
                         <div className="min-w-0">
-                          <p className="text-foreground truncate font-medium text-[13px]">{task.title}</p>
+                          <p className="text-foreground truncate font-medium text-[13px] hover:text-primary transition-colors">{task.title}</p>
                           {boardName && (
                             <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
                               <LayoutDashboard className="w-3 h-3 shrink-0" />
@@ -298,7 +291,7 @@ export default function HomePage() {
                       {/* Priority */}
                       <div className="px-3 py-3 flex items-center justify-center">
                         <span className={cn(
-                          'px-2 py-0.5 rounded text-[10px] font-medium whitespace-nowrap',
+                          'px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap',
                           priority.color,
                           priority.text
                         )}>

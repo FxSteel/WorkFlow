@@ -6,23 +6,9 @@ import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import DatePicker from '../ui/DatePicker'
 import { cn } from '../../lib/utils'
-
-const STATUS_OPTIONS = ['Por hacer', 'En progreso', 'En revisión', 'Completado', 'Bloqueado']
-const STATUS_COLORS = {
-  'Por hacer': 'bg-gray-400',
-  'En progreso': 'bg-blue-500',
-  'En revisión': 'bg-yellow-500',
-  'Completado': 'bg-emerald-500',
-  'Bloqueado': 'bg-red-500',
-}
-
-const PRIORITY_OPTIONS = ['critical', 'high', 'medium', 'low']
-const PRIORITY_CONFIG = {
-  critical: { label: 'Crítica', color: 'bg-red-500', textColor: 'text-white' },
-  high: { label: 'Alta', color: 'bg-orange-500', textColor: 'text-white' },
-  medium: { label: 'Media', color: 'bg-yellow-500', textColor: 'text-black' },
-  low: { label: 'Baja', color: 'bg-blue-500', textColor: 'text-white' },
-}
+import { STATUS_OPTIONS, STATUS_COLORS, PRIORITY_OPTIONS, PRIORITY_CONFIG } from '../../lib/constants'
+import { useNotifications } from '../../hooks/useNotifications'
+import { toast } from 'sonner'
 
 // Portal dropdown hook
 function usePortalDropdown() {
@@ -59,17 +45,15 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
   const { state, openTask } = useApp()
   const { user } = useAuth()
   const { updateTask, deleteTask, createTask } = useSupabase()
+  const { notifyTaskAssigned } = useNotifications()
 
   const assignableUsers = useMemo(() => {
-    // Always use member.id (members table PK), not user.id (auth UUID)
-    // The current user should already be in the members list as admin
     return state.members.map(m => ({
       id: m.id,
       name: m.name,
       email: m.email,
-      avatar: m.user_id === user?.id ? user?.user_metadata?.avatar_url : null,
+      avatar: m.avatar_url || (m.user_id === user?.id ? user?.user_metadata?.avatar_url : null),
       color: m.color || '#6c5ce7',
-      isCurrentUser: m.user_id === user?.id,
     }))
   }, [user, state.members])
 
@@ -99,6 +83,10 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
 
   const handleAssigneeChange = async (memberId, memberName) => {
     await updateTask(task.id, { assignee_id: memberId, assignee_name: memberName })
+    if (memberId) {
+      const member = state.members.find(m => m.id === memberId)
+      notifyTaskAssigned({ task, assigneeMember: member, fromUser: user, workspaceId: state.currentWorkspace?.id })
+    }
     assignee.setOpen(false)
   }
 
@@ -116,11 +104,13 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
       board_id: task.board_id,
       position: state.tasks.length,
     })
+    toast.success('Tarea duplicada')
     actions.setOpen(false)
   }
 
   const handleDelete = async () => {
     await deleteTask(task.id)
+    toast.success('Tarea eliminada')
     actions.setOpen(false)
   }
 
@@ -158,12 +148,24 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
           className="flex items-center gap-1.5 hover:bg-accent rounded px-1.5 py-0.5 transition-colors"
         >
           {task.assignee_name ? (
-            <>
-              <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-semibold text-primary">
-                {task.assignee_name[0]?.toUpperCase()}
-              </div>
-              <span className="text-xs truncate max-w-[70px]">{task.assignee_name}</span>
-            </>
+            (() => {
+              const assignedUser = assignableUsers.find(u => u.id === task.assignee_id)
+              return (
+                <>
+                  {assignedUser?.avatar ? (
+                    <img src={assignedUser.avatar} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold text-white shrink-0"
+                      style={{ backgroundColor: assignedUser?.color || '#6c5ce7' }}
+                    >
+                      {task.assignee_name[0]?.toUpperCase()}
+                    </div>
+                  )}
+                  <span className="text-xs truncate max-w-[70px]">{task.assignee_name}</span>
+                </>
+              )
+            })()
           ) : (
             <div className="w-6 h-6 rounded-full border-2 border-dashed border-muted-foreground/40" />
           )}
@@ -277,12 +279,12 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
           >
             {PRIORITY_OPTIONS.map(p => (
               <button
-                key={p}
-                onClick={() => handlePriorityChange(p)}
+                key={p.value}
+                onClick={() => handlePriorityChange(p.value)}
                 className="w-full px-2 py-1 text-left hover:bg-accent transition-colors flex items-center"
               >
-                <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium w-full text-center', PRIORITY_CONFIG[p].color, PRIORITY_CONFIG[p].textColor)}>
-                  {PRIORITY_CONFIG[p].label}
+                <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium w-full text-center', p.color, p.textColor)}>
+                  {p.label}
                 </span>
               </button>
             ))}
