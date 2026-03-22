@@ -28,14 +28,14 @@ export default function TaskSidePanel() {
   const [description, setDescription] = useState('')
 
   const assignableUsers = useMemo(() => {
-    return state.members.map(m => ({
+    return state.orgMembers.map(m => ({
       id: m.id,
       name: m.name,
       email: m.email,
       avatar: m.avatar_url || (m.user_id === user?.id ? user?.user_metadata?.avatar_url : null),
       color: m.color || '#6c5ce7',
     }))
-  }, [user, state.members])
+  }, [user, state.orgMembers])
 
   useEffect(() => {
     if (task) {
@@ -160,7 +160,7 @@ export default function TaskSidePanel() {
                   assignee_name: member?.name || '',
                 })
                 if (val !== '_none' && member) {
-                  const dbMember = state.members.find(m => m.id === val)
+                  const dbMember = state.orgMembers.find(m => m.id === val)
                   notifyTaskAssigned({ task, assigneeMember: dbMember, fromUser: user, workspaceId: state.currentWorkspace?.id })
                 }
               }}

@@ -8,7 +8,7 @@ import { cn } from '../../lib/utils'
 
 export default function InviteNotifications() {
   const { user } = useAuth()
-  const { fetchMyInvites, acceptInvite, declineInvite, fetchWorkspaces } = useSupabase()
+  const { fetchMyInvites, acceptInvite, declineInvite, fetchOrganizations } = useSupabase()
   const [invites, setInvites] = useState([])
   const [isOpen, setIsOpen] = useState(false)
   const [loadingId, setLoadingId] = useState(null)
@@ -38,14 +38,14 @@ export default function InviteNotifications() {
     const userName = user.user_metadata?.full_name || user.email.split('@')[0]
     const { error } = await acceptInvite(
       invite.id,
-      invite.workspace_id,
+      invite.org_id,
       user.id,
       userName,
       user.email,
     )
     if (!error) {
       setInvites(prev => prev.filter(i => i.id !== invite.id))
-      await fetchWorkspaces()
+      await fetchOrganizations()
     }
     setLoadingId(null)
   }
@@ -81,7 +81,7 @@ export default function InviteNotifications() {
             <h3 className="text-sm font-semibold text-foreground">Notificaciones</h3>
             {pendingCount > 0 && (
               <p className="text-xs text-muted-foreground">
-                {pendingCount} invitación{pendingCount > 1 ? 'es' : ''} pendiente{pendingCount > 1 ? 's' : ''}
+                {pendingCount} invitacion{pendingCount > 1 ? 'es' : ''} pendiente{pendingCount > 1 ? 's' : ''}
               </p>
             )}
           </div>
@@ -100,14 +100,14 @@ export default function InviteNotifications() {
                   <div className="flex items-start gap-3">
                     <div
                       className="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0 mt-0.5"
-                      style={{ backgroundColor: invite.workspaces?.color || '#6c5ce7' }}
+                      style={{ backgroundColor: invite.organizations?.color || '#6c5ce7' }}
                     >
-                      {invite.workspaces?.name?.[0]?.toUpperCase() || '?'}
+                      {invite.organizations?.name?.[0]?.toUpperCase() || '?'}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-foreground">
                         Te invitaron a{' '}
-                        <span className="font-semibold">{invite.workspaces?.name || 'Workspace'}</span>
+                        <span className="font-semibold">{invite.organizations?.name || 'Organizacion'}</span>
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         Por: {invite.invited_by_name} · Rol: {invite.role}

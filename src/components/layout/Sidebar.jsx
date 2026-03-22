@@ -16,6 +16,8 @@ import {
   Palette,
   Copy,
   MoreHorizontal,
+  Building2,
+  Check,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
@@ -35,13 +37,19 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
   const { user } = useAuth()
   const {
     createWorkspace, createBoard, deleteWorkspace, updateWorkspace, fetchBoards,
-    deleteBoard, updateBoard,
+    deleteBoard, updateBoard, createOrganization, updateOrganization, deleteOrganization, fetchWorkspaces,
   } = useSupabase()
   const [expandedWorkspaces, setExpandedWorkspaces] = useState({})
   const [newWorkspaceName, setNewWorkspaceName] = useState('')
   const [showNewWorkspace, setShowNewWorkspace] = useState(false)
   const [newBoardName, setNewBoardName] = useState('')
   const [showNewBoard, setShowNewBoard] = useState(null)
+  const [showOrgDropdown, setShowOrgDropdown] = useState(false)
+  const [showNewOrg, setShowNewOrg] = useState(false)
+  const [newOrgName, setNewOrgName] = useState('')
+  const [editingOrgId, setEditingOrgId] = useState(null)
+  const [editOrgName, setEditOrgName] = useState('')
+  const [deleteOrgConfirm, setDeleteOrgConfirm] = useState(null)
 
   // Context menu state: { type: 'workspace'|'board', id, x, y, data }
   const [ctxMenu, setCtxMenu] = useState(null)
@@ -53,8 +61,13 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
   const [workspacesLoaded, setWorkspacesLoaded] = useState(false)
   const loadingStarted = useRef(false)
   const ctxRef = useRef(null)
+  const orgDropdownRef = useRef(null)
 
-  // Track when workspaces fetch completes (loading: false→true→false)
+  // Check if current user is Owner or Admin in the current org
+  const currentOrgMember = state.orgMembers.find(m => m.user_id === user?.id)
+  const canManageWorkspaces = currentOrgMember?.role === 'owner' || currentOrgMember?.role === 'admin'
+
+  // Track when workspaces fetch completes (loading: false->true->false)
   useEffect(() => {
     if (state.loading) {
       loadingStarted.current = true
@@ -84,6 +97,17 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
     }
   }, [])
 
+  // Close org dropdown on outside click
+  useEffect(() => {
+    const close = (e) => {
+      if (orgDropdownRef.current && !orgDropdownRef.current.contains(e.target)) {
+        setShowOrgDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [])
+
   const openCtx = useCallback((e, type, data) => {
     e.preventDefault()
     e.stopPropagation()
@@ -102,13 +126,58 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
     setExpandedWorkspaces(prev => ({ ...prev, [id]: !prev[id] }))
   }
 
+  // --- Org CRUD ---
+  const handleCreateOrg = async () => {
+    if (!newOrgName.trim()) return
+    const { data } = await createOrganization({
+      name: newOrgName.trim(),
+      owner_id: user.id,
+      color: WORKSPACE_COLORS[Math.floor(Math.random() * WORKSPACE_COLORS.length)],
+    })
+    if (data) {
+      setNewOrgName('')
+      setShowNewOrg(false)
+      // Switch to the new org
+      dispatch({ type: 'SET_CURRENT_ORG', payload: data })
+    }
+  }
+
+  const handleSwitchOrg = (org) => {
+    dispatch({ type: 'SET_CURRENT_ORG', payload: org })
+    setShowOrgDropdown(false)
+    setWorkspacesLoaded(false)
+    loadingStarted.current = false
+  }
+
+  const handleRenameOrg = async (orgId) => {
+    if (editOrgName.trim()) {
+      await updateOrganization(orgId, { name: editOrgName.trim() })
+      toast.success('Organización renombrada')
+    }
+    setEditingOrgId(null)
+    setEditOrgName('')
+  }
+
+  const handleDeleteOrg = async (orgId) => {
+    await deleteOrganization(orgId)
+    toast.success('Organización eliminada')
+    setDeleteOrgConfirm(null)
+    setShowOrgDropdown(false)
+    // Switch to another org if available
+    const remaining = state.organizations.filter(o => o.id !== orgId)
+    if (remaining.length > 0) {
+      dispatch({ type: 'SET_CURRENT_ORG', payload: remaining[0] })
+    }
+  }
+
   // --- Workspace CRUD ---
   const handleCreateWorkspace = async () => {
-    if (!newWorkspaceName.trim()) return
+    if (!newWorkspaceName.trim() || !state.currentOrg) return
     const { data } = await createWorkspace({
       name: newWorkspaceName.trim(),
       owner_id: user.id,
       color: WORKSPACE_COLORS[Math.floor(Math.random() * WORKSPACE_COLORS.length)],
+      org_id: state.currentOrg.id,
     })
     if (data) { setNewWorkspaceName(''); setShowNewWorkspace(false) }
   }
@@ -208,6 +277,129 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
         </button>
       </div>
 
+      {/* Organization Selector */}
+      {!collapsed && state.currentOrg && (
+        <div className="px-2 pt-2 pb-1" ref={orgDropdownRef}>
+          <button
+            onClick={() => setShowOrgDropdown(!showOrgDropdown)}
+            className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-accent transition-colors"
+          >
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+              style={{ backgroundColor: state.currentOrg.color || '#6c5ce7' }}
+            >
+              {state.currentOrg.icon_url ? (
+                <img src={state.currentOrg.icon_url} alt="" className="w-full h-full rounded-lg object-cover" />
+              ) : (
+                state.currentOrg.name?.[0]?.toUpperCase()
+              )}
+            </div>
+            <span className="text-sm font-semibold text-sidebar-foreground truncate flex-1 text-left">
+              {state.currentOrg.name}
+            </span>
+            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          </button>
+
+          {showOrgDropdown && (
+            <div className="mt-1 rounded-lg border border-border bg-popover shadow-lg py-1 z-50 animate-scale-in">
+              {state.organizations.map(org => {
+                const isOwner = org.owner_id === user?.id
+                return (
+                <div key={org.id} className="group/org relative">
+                  {editingOrgId === org.id ? (
+                    <div className="px-2 py-1">
+                      <input
+                        autoFocus
+                        value={editOrgName}
+                        onChange={(e) => setEditOrgName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRenameOrg(org.id)
+                          if (e.key === 'Escape') { setEditingOrgId(null); setEditOrgName('') }
+                        }}
+                        onBlur={() => handleRenameOrg(org.id)}
+                        className="w-full px-2 py-1 text-sm rounded border border-ring bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    </div>
+                  ) : (
+                    <div className={cn(
+                      'flex items-center px-3 py-2 transition-colors',
+                      state.currentOrg?.id === org.id ? 'bg-accent' : 'hover:bg-accent/50'
+                    )}>
+                      <button
+                        onClick={() => handleSwitchOrg(org)}
+                        className="flex-1 flex items-center gap-2 text-sm min-w-0"
+                      >
+                        <div
+                          className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+                          style={{ backgroundColor: org.color || '#6c5ce7' }}
+                        >
+                          {org.name?.[0]?.toUpperCase()}
+                        </div>
+                        <span className="truncate flex-1 text-left text-foreground">{org.name}</span>
+                      </button>
+                      {/* Org actions — hover to show */}
+                      {isOwner && (
+                        <div className="flex items-center gap-0.5 opacity-0 group-hover/org:opacity-100 transition-opacity ml-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditingOrgId(org.id)
+                              setEditOrgName(org.name)
+                            }}
+                            className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+                            title="Renombrar"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDeleteOrgConfirm(org)
+                              setShowOrgDropdown(false)
+                            }}
+                            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                )
+              })}
+
+              <div className="h-px bg-border my-1" />
+              {showNewOrg ? (
+                <div className="px-2 py-1">
+                  <input
+                    autoFocus
+                    value={newOrgName}
+                    onChange={(e) => setNewOrgName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleCreateOrg()
+                      if (e.key === 'Escape') { setShowNewOrg(false); setNewOrgName('') }
+                    }}
+                    onBlur={() => { if (!newOrgName.trim()) setShowNewOrg(false) }}
+                    placeholder="Nombre de la organización..."
+                    className="w-full px-2 py-1.5 text-sm rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowNewOrg(true)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Crear organización
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Navigation */}
       {!collapsed && (
         <div className="p-2 space-y-0.5">
@@ -230,12 +422,14 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Espacios de trabajo
             </span>
-            <button
-              onClick={() => setShowNewWorkspace(true)}
-              className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
+            {canManageWorkspaces && (
+              <button
+                onClick={() => setShowNewWorkspace(true)}
+                className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         )}
 
@@ -416,21 +610,23 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
                 {workspace.name?.[0]?.toUpperCase()}
               </button>
             ))}
-            <button
-              onClick={() => {
-                dispatch({ type: 'TOGGLE_SIDEBAR' })
-                setTimeout(() => setShowNewWorkspace(true), 300)
-              }}
-              className="w-9 h-9 rounded-lg flex items-center justify-center border border-dashed border-muted-foreground text-muted-foreground hover:border-foreground hover:text-foreground transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+            {canManageWorkspaces && (
+              <button
+                onClick={() => {
+                  dispatch({ type: 'TOGGLE_SIDEBAR' })
+                  setTimeout(() => setShowNewWorkspace(true), 300)
+                }}
+                className="w-9 h-9 rounded-lg flex items-center justify-center border border-dashed border-muted-foreground text-muted-foreground hover:border-foreground hover:text-foreground transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            )}
           </div>
         )}
       </div>
 
-      {/* Team Presence — only when a workspace is selected */}
-      {!collapsed && state.currentWorkspace && <TeamPresence />}
+      {/* Team Presence — show when org is selected */}
+      {!collapsed && state.currentOrg && <TeamPresence />}
 
       {/* ========== CONTEXT MENU ========== */}
       {ctxMenu && ctxMenu.data && (
@@ -533,6 +729,16 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
         </div>
       )}
 
+      {/* ========== DELETE ORG CONFIRMATION ========== */}
+      {deleteOrgConfirm && (
+        <DeleteConfirmModal
+          type="organización"
+          name={deleteOrgConfirm.name}
+          onConfirm={() => handleDeleteOrg(deleteOrgConfirm.id)}
+          onCancel={() => setDeleteOrgConfirm(null)}
+        />
+      )}
+
       {/* ========== DELETE CONFIRMATION ========== */}
       {deleteConfirm && (
         <DeleteConfirmModal
@@ -576,11 +782,11 @@ function DeleteConfirmModal({ type, name, onConfirm, onCancel }) {
             <h3 className="font-semibold text-foreground">
               Eliminar {isWorkspace ? 'espacio' : 'tablero'}
             </h3>
-            <p className="text-xs text-muted-foreground">Esta acción no se puede deshacer</p>
+            <p className="text-xs text-muted-foreground">Esta accion no se puede deshacer</p>
           </div>
         </div>
         <p className="text-sm text-muted-foreground mb-1">
-          Se eliminará permanentemente {isWorkspace ? 'el espacio de trabajo' : 'el tablero'}{' '}
+          Se eliminara permanentemente {isWorkspace ? 'el espacio de trabajo' : 'el tablero'}{' '}
           <span className="font-semibold text-foreground">"{name}"</span>
           {isWorkspace
             ? ' junto con todos sus tableros, sprints, tareas y miembros.'

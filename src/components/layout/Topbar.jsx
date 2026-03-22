@@ -82,7 +82,7 @@ export default function Topbar({ onNewTask, onNewSprint, onOpenSettings, onOpenP
 
     if (user?.id) {
       await supabase
-        .from('members')
+        .from('org_members')
         .update({ status })
         .eq('user_id', user.id)
     }
@@ -160,17 +160,22 @@ export default function Topbar({ onNewTask, onNewSprint, onOpenSettings, onOpenP
 
         {/* User menu */}
         <div className="relative" ref={menuRef}>
-          <StatusAvatar
-            src={userAvatar}
-            name={userName}
-            size="md"
-            status={userStatus}
+          <button
             onClick={() => {
               setShowUserMenu(!showUserMenu)
               setShowStatusPicker(false)
               setDurationSubmenu(null)
             }}
-          />
+            className="flex items-center rounded-full hover:ring-2 hover:ring-accent transition-all"
+          >
+            {userAvatar ? (
+              <img src={userAvatar} alt={userName} className="w-8 h-8 rounded-full object-cover" referrerPolicy="no-referrer" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-[11px] font-semibold text-primary-foreground">
+                {userName[0]?.toUpperCase()}
+              </div>
+            )}
+          </button>
 
           {showUserMenu && (
             <div className="absolute top-full right-0 mt-1 w-72 rounded-xl border border-border bg-popover shadow-lg py-1 z-50 animate-scale-in">

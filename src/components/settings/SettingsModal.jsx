@@ -3,15 +3,19 @@ import {
   X, Settings, Bell, Link2, Building2, Trash2,
   AlertTriangle, Upload, CheckCircle2, Loader2,
   SlidersHorizontal, PanelRight, Maximize2, Layers,
+  CreditCard, Sparkles, Check, ExternalLink,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import { useApp } from '../../context/AppContext'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
+import { toast } from 'sonner'
 
 const TABS = [
   { id: 'general', label: 'Configuración general', icon: Settings },
   { id: 'preferences', label: 'Preferencias', icon: SlidersHorizontal },
   { id: 'notifications', label: 'Notificaciones', icon: Bell },
+  { id: 'billing', label: 'Facturación', icon: CreditCard },
   { id: 'connections', label: 'Conexiones', icon: Link2, disabled: true },
 ]
 
@@ -76,6 +80,7 @@ export default function SettingsModal({ isOpen, onClose }) {
           <div className="flex-1 overflow-y-auto">
             {activeTab === 'general' && <GeneralSettings />}
             {activeTab === 'preferences' && <PreferencesSettings />}
+            {activeTab === 'billing' && <BillingSettings />}
             {activeTab === 'notifications' && <NotificationSettings />}
           </div>
         </div>
@@ -86,190 +91,243 @@ export default function SettingsModal({ isOpen, onClose }) {
 
 function GeneralSettings() {
   const { user, signOut } = useAuth()
-  const [companyName, setCompanyName] = useState(() =>
-    localStorage.getItem('workflow-company-name') || ''
-  )
-  const [companyIcon, setCompanyIcon] = useState(() =>
-    localStorage.getItem('workflow-company-icon') || ''
-  )
+  const { state, dispatch } = useApp()
+  const org = state.currentOrg
+  const isOwner = org?.owner_id === user?.id
+
+  const [orgName, setOrgName] = useState(org?.name || '')
+  const [orgIcon, setOrgIcon] = useState(org?.icon_url || '')
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteText, setDeleteText] = useState('')
 
-  const handleSave = () => {
+  useEffect(() => {
+    setOrgName(org?.name || '')
+    setOrgIcon(org?.icon_url || '')
+  }, [org?.id])
+
+  const handleSave = async () => {
+    if (!org || !orgName.trim()) return
     setSaving(true)
-    localStorage.setItem('workflow-company-name', companyName)
-    localStorage.setItem('workflow-company-icon', companyIcon)
-    setTimeout(() => {
-      setSaving(false)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    }, 500)
+    const { data } = await supabase
+      .from('organizations')
+      .update({ name: orgName.trim() })
+      .eq('id', org.id)
+      .select()
+      .single()
+    if (data) dispatch({ type: 'UPDATE_ORGANIZATION', payload: data })
+    setSaving(false)
+    toast.success('Organización actualizada')
   }
 
-  const handleDeleteAccount = async () => {
-    if (deleteText !== 'ELIMINAR') return
-    await signOut()
-  }
-
-  const handleIconUpload = (e) => {
+  const handleIconUpload = async (e) => {
     const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const dataUrl = ev.target?.result
-      setCompanyIcon(dataUrl)
-      localStorage.setItem('workflow-company-icon', dataUrl)
+    if (!file || !org) return
+    e.target.value = ''
+    setUploading(true)
+    const ext = file.name.split('.').pop()
+    const path = `org-icons/${org.id}_${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('attachments').upload(path, file, { upsert: true })
+    if (!error) {
+      const { data } = supabase.storage.from('attachments').getPublicUrl(path)
+      const url = data?.publicUrl
+      if (url) {
+        setOrgIcon(url)
+        const { data: updated } = await supabase
+          .from('organizations')
+          .update({ icon_url: url })
+          .eq('id', org.id)
+          .select()
+          .single()
+        if (updated) dispatch({ type: 'UPDATE_ORGANIZATION', payload: updated })
+        toast.success('Icono actualizado')
+      }
     }
-    reader.readAsDataURL(file)
+    setUploading(false)
+  }
+
+  const handleRemoveIcon = async () => {
+    if (!org) return
+    setOrgIcon('')
+    const { data } = await supabase
+      .from('organizations')
+      .update({ icon_url: null })
+      .eq('id', org.id)
+      .select()
+      .single()
+    if (data) dispatch({ type: 'UPDATE_ORGANIZATION', payload: data })
+    toast.success('Icono eliminado')
+  }
+
+  const handleDeleteOrg = async () => {
+    if (deleteText !== 'ELIMINAR' || !org) return
+    await supabase.from('organizations').delete().eq('id', org.id)
+    dispatch({ type: 'DELETE_ORGANIZATION', payload: org.id })
+    const remaining = state.organizations.filter(o => o.id !== org.id)
+    if (remaining.length > 0) dispatch({ type: 'SET_CURRENT_ORG', payload: remaining[0] })
+    toast.success('Organización eliminada')
+    setShowDeleteConfirm(false)
+    setDeleteText('')
+  }
+
+  if (!org) {
+    return (
+      <div className="px-6 py-12 text-center">
+        <Building2 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+        <p className="text-sm text-muted-foreground">Selecciona una organización</p>
+      </div>
+    )
   }
 
   return (
     <div className="px-6 py-5 space-y-8">
-      {/* Company Info */}
+      {/* Org Info */}
       <section>
-        <h4 className="text-sm font-semibold text-foreground mb-1">Empresa</h4>
+        <h4 className="text-sm font-semibold text-foreground mb-1">Organización</h4>
         <p className="text-xs text-muted-foreground mb-4">Configura la información de tu organización</p>
 
         <div className="space-y-4">
-          {/* Company Icon */}
+          {/* Org Icon */}
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-2 block">Icono de la empresa</label>
+            <label className="text-xs font-medium text-muted-foreground mb-2 block">Icono</label>
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-xl border-2 border-dashed border-border flex items-center justify-center bg-muted/50 overflow-hidden">
-                {companyIcon ? (
-                  <img src={companyIcon} alt="" className="w-full h-full object-cover rounded-xl" />
+              <div className="w-16 h-16 rounded-xl border-2 border-dashed border-border flex items-center justify-center bg-muted/50 overflow-hidden"
+                style={{ backgroundColor: !orgIcon ? (org.color || '#6c5ce7') : undefined }}
+              >
+                {orgIcon ? (
+                  <img src={orgIcon} alt="" className="w-full h-full object-cover rounded-xl" />
                 ) : (
-                  <Building2 className="w-6 h-6 text-muted-foreground" />
+                  <span className="text-2xl font-bold text-white">{org.name?.[0]?.toUpperCase()}</span>
                 )}
               </div>
-              <div>
-                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-secondary text-secondary-foreground hover:bg-accent transition-colors cursor-pointer">
-                  <Upload className="w-3.5 h-3.5" />
-                  Subir imagen
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleIconUpload}
-                  />
-                </label>
-                {companyIcon && (
-                  <button
-                    onClick={() => { setCompanyIcon(''); localStorage.removeItem('workflow-company-icon') }}
-                    className="ml-2 text-xs text-muted-foreground hover:text-destructive transition-colors"
-                  >
-                    Eliminar
-                  </button>
-                )}
-                <p className="text-[11px] text-muted-foreground mt-1">PNG, JPG. Máximo 1MB</p>
-              </div>
+              {isOwner && (
+                <div>
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-secondary text-secondary-foreground hover:bg-accent transition-colors cursor-pointer">
+                    <Upload className="w-3.5 h-3.5" />
+                    {uploading ? 'Subiendo...' : orgIcon ? 'Cambiar' : 'Subir imagen'}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleIconUpload} />
+                  </label>
+                  {orgIcon && (
+                    <button onClick={handleRemoveIcon} className="ml-2 text-xs text-muted-foreground hover:text-destructive transition-colors">
+                      Eliminar
+                    </button>
+                  )}
+                  <p className="text-[11px] text-muted-foreground mt-1">PNG, JPG. Máximo 1MB</p>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Company Name */}
+          {/* Org Name */}
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Nombre de la empresa</label>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Nombre de la organización</label>
             <input
               type="text"
-              value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
-              placeholder="Mi Empresa"
-              className="w-full max-w-sm px-3 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }}
+              disabled={!isOwner}
+              placeholder="Mi Organización"
+              className="w-full max-w-sm px-3 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground disabled:opacity-50"
             />
           </div>
 
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            {saving ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : saved ? (
-              <CheckCircle2 className="w-3.5 h-3.5" />
-            ) : null}
-            {saved ? 'Guardado' : 'Guardar cambios'}
-          </button>
-        </div>
-      </section>
-
-      {/* Account info */}
-      <section>
-        <h4 className="text-sm font-semibold text-foreground mb-1">Cuenta</h4>
-        <p className="text-xs text-muted-foreground mb-4">Información de tu cuenta</p>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="text-sm text-foreground">Correo electrónico</p>
-              <p className="text-xs text-muted-foreground">{user?.email}</p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="text-sm text-foreground">Nombre</p>
-              <p className="text-xs text-muted-foreground">{user?.user_metadata?.full_name || 'No definido'}</p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="text-sm text-foreground">Proveedor de autenticación</p>
-              <p className="text-xs text-muted-foreground capitalize">{user?.app_metadata?.provider || 'email'}</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Danger Zone */}
-      <section>
-        <div className="rounded-xl border border-destructive/30 p-5">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="w-4 h-4 text-destructive" />
-            <h4 className="text-sm font-semibold text-destructive">Zona de riesgo</h4>
-          </div>
-          <p className="text-xs text-muted-foreground mb-4">
-            Al eliminar tu cuenta se borrarán permanentemente todos tus datos, espacios de trabajo, tableros, tareas y configuraciones. Esta acción no se puede deshacer.
-          </p>
-
-          {!showDeleteConfirm ? (
+          {isOwner && (
             <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="px-4 py-2 rounded-lg text-sm font-medium border border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground transition-colors"
+              onClick={handleSave}
+              disabled={saving || !orgName.trim()}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
-              Eliminar mi cuenta
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              Guardar cambios
             </button>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-xs text-foreground font-medium">
-                Escribe <span className="font-bold text-destructive">ELIMINAR</span> para confirmar
-              </p>
-              <input
-                type="text"
-                value={deleteText}
-                onChange={(e) => setDeleteText(e.target.value)}
-                placeholder="ELIMINAR"
-                className="w-full max-w-xs px-3 py-2 rounded-lg border border-destructive/50 bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-destructive placeholder:text-muted-foreground"
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleDeleteAccount}
-                  disabled={deleteText !== 'ELIMINAR'}
-                  className="px-4 py-2 rounded-lg text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Confirmar eliminación
-                </button>
-                <button
-                  onClick={() => { setShowDeleteConfirm(false); setDeleteText('') }}
-                  className="px-4 py-2 rounded-lg text-sm font-medium bg-secondary text-secondary-foreground hover:bg-accent transition-colors"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
           )}
         </div>
       </section>
+
+      {/* Org details */}
+      <section>
+        <h4 className="text-sm font-semibold text-foreground mb-1">Detalles</h4>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="text-sm text-foreground">Propietario</p>
+              <p className="text-xs text-muted-foreground">{isOwner ? `${user?.user_metadata?.full_name || user?.email} (tú)` : 'Otro usuario'}</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="text-sm text-foreground">Miembros</p>
+              <p className="text-xs text-muted-foreground">{state.orgMembers.length} miembro{state.orgMembers.length !== 1 ? 's' : ''}</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="text-sm text-foreground">Espacios de trabajo</p>
+              <p className="text-xs text-muted-foreground">{state.workspaces.length} espacio{state.workspaces.length !== 1 ? 's' : ''}</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="text-sm text-foreground">Creada</p>
+              <p className="text-xs text-muted-foreground">{org.created_at ? new Date(org.created_at).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Danger Zone — only owner */}
+      {isOwner && (
+        <section>
+          <div className="rounded-xl border border-destructive/30 p-5">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle className="w-4 h-4 text-destructive" />
+              <h4 className="text-sm font-semibold text-destructive">Zona de riesgo</h4>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              Al eliminar esta organización se borrarán permanentemente todos los espacios de trabajo, tableros, tareas, miembros y configuraciones. Esta acción no se puede deshacer.
+            </p>
+
+            {!showDeleteConfirm ? (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="px-4 py-2 rounded-lg text-sm font-medium border border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground transition-colors"
+              >
+                Eliminar organización
+              </button>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-foreground font-medium">
+                  Escribe <span className="font-bold text-destructive">ELIMINAR</span> para confirmar
+                </p>
+                <input
+                  type="text"
+                  value={deleteText}
+                  onChange={(e) => setDeleteText(e.target.value)}
+                  placeholder="ELIMINAR"
+                  className="w-full max-w-xs px-3 py-2 rounded-lg border border-destructive/50 bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-destructive placeholder:text-muted-foreground"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleDeleteOrg}
+                    disabled={deleteText !== 'ELIMINAR'}
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Confirmar eliminación
+                  </button>
+                  <button
+                    onClick={() => { setShowDeleteConfirm(false); setDeleteText('') }}
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-secondary text-secondary-foreground hover:bg-accent transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
     </div>
   )
 }
@@ -278,13 +336,11 @@ function PreferencesSettings() {
   const [taskView, setTaskView] = useState(() =>
     localStorage.getItem('workflow-task-editor-view') || 'sidebar'
   )
-  const [saved, setSaved] = useState(false)
 
   const changeView = (view) => {
     setTaskView(view)
     localStorage.setItem('workflow-task-editor-view', view)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 1500)
+    toast.success('Preferencia guardada')
   }
 
   const VIEW_OPTIONS = [
@@ -315,13 +371,6 @@ function PreferencesSettings() {
         <p className="text-xs text-muted-foreground mb-4">
           Elige cómo quieres abrir las tareas al crearlas o editarlas. Esta preferencia solo afecta tu cuenta.
         </p>
-
-        {saved && (
-          <div className="flex items-center gap-1.5 mb-3 text-xs text-success animate-fade-in">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            Guardado automáticamente
-          </div>
-        )}
 
         <div className="space-y-2">
           {VIEW_OPTIONS.map(opt => {
@@ -368,6 +417,269 @@ function PreferencesSettings() {
   )
 }
 
+function BillingSettings() {
+  const { user } = useAuth()
+  const [subscription, setSubscription] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [paying, setPaying] = useState(false)
+
+  useEffect(() => {
+    fetchSubscription()
+  }, [])
+
+  const fetchSubscription = async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    // Sync status with AlohaPay if pending
+    if (data?.status === 'pending' && data?.payment_link_id) {
+      try {
+        const res = await fetch(
+          `https://api.alohapay.co/api/external/v1/payment-links/${data.payment_link_id}`,
+          { headers: { 'X-API-KEY': import.meta.env.VITE_ALOHAPAY_API_KEY } }
+        )
+        const result = await res.json()
+        if (result.success && result.data) {
+          const alohapayStatus = result.data.status // active, completed, cancelled, expired
+          let newStatus = data.status
+          if (alohapayStatus === 'completed') newStatus = 'active'
+          else if (alohapayStatus === 'cancelled') newStatus = 'cancelled'
+          else if (alohapayStatus === 'expired') newStatus = 'expired'
+
+          if (newStatus !== data.status) {
+            await supabase
+              .from('subscriptions')
+              .update({ status: newStatus })
+              .eq('id', data.id)
+            data.status = newStatus
+          }
+        }
+      } catch {}
+    }
+
+    if (data) setSubscription(data)
+    setLoading(false)
+  }
+
+  const handleSubscribe = async () => {
+    setPaying(true)
+    try {
+      const response = await fetch('https://api.alohapay.co/api/external/v1/payment-links', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-KEY': import.meta.env.VITE_ALOHAPAY_API_KEY,
+        },
+        body: JSON.stringify({
+          amount: 25000,
+          currency: 'CLP',
+          description: 'Pago de suscripción Mensual - WorkFlow',
+          success_url: window.location.origin + '?payment=success',
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success && result.data) {
+        // Save payment link to DB
+        await supabase.from('subscriptions').insert({
+          user_id: user.id,
+          plan: 'pro',
+          status: 'pending',
+          payment_link_id: result.data.id,
+          payment_link_url: result.data.url,
+          amount: 25000,
+          currency: 'CLP',
+          current_period_start: new Date().toISOString(),
+          current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        })
+
+        // Redirect to checkout
+        window.open(result.data.url, '_blank')
+        fetchSubscription()
+      }
+    } catch (err) {
+      console.error('Payment error:', err)
+    }
+    setPaying(false)
+  }
+
+  const isPro = subscription?.status === 'active'
+  const isPending = subscription?.status === 'pending'
+  const isCancelled = subscription?.status === 'cancelled'
+  const isExpired = subscription?.status === 'expired'
+  const canSubscribe = !subscription || isCancelled || isExpired
+
+  const formatDate = (date) => {
+    if (!date) return ''
+    return new Date(date).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })
+  }
+
+  const PLAN_FEATURES = [
+    'Espacios de trabajo ilimitados',
+    'Tareas y sprints ilimitados',
+    'Miembros ilimitados',
+    'Todas las vistas (Kanban, Calendario, Gantt, etc.)',
+    'Editor de bloques con multimedia',
+    'Comentarios y @menciones',
+    'Notificaciones en tiempo real',
+    'Soporte prioritario',
+  ]
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="px-6 py-5 space-y-6">
+      {/* Current plan */}
+      <div>
+        <h4 className="text-sm font-semibold text-foreground mb-1">Tu plan actual</h4>
+        <p className="text-xs text-muted-foreground mb-4">
+          {isPro ? 'Tienes acceso completo a WorkFlow Pro.' : 'Estás usando el plan gratuito.'}
+        </p>
+
+        {/* Plan card */}
+        <div className={cn(
+          'rounded-xl border-2 p-5 transition-all',
+          isPro ? 'border-foreground bg-foreground/5' : 'border-border'
+        )}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                'w-10 h-10 rounded-lg flex items-center justify-center',
+                isPro ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground'
+              )}>
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-foreground">WorkFlow Pro</h3>
+                <p className="text-xs text-muted-foreground">
+                  {isPro ? 'Plan activo' : isPending ? 'Pago pendiente' : isCancelled ? 'Pago cancelado' : isExpired ? 'Link expirado' : 'Plan recomendado'}
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-foreground">$25.000</p>
+              <p className="text-xs text-muted-foreground">CLP / mes</p>
+            </div>
+          </div>
+
+          {/* Features */}
+          <div className="space-y-2 mb-5">
+            {PLAN_FEATURES.map((feature, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Check className="w-4 h-4 text-success shrink-0" />
+                <span className="text-sm text-foreground">{feature}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Action */}
+          {isPro ? (
+            <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+              <div>
+                <p className="text-sm font-medium text-foreground">Plan activo</p>
+                <p className="text-xs text-muted-foreground">
+                  Próximo cobro: {formatDate(subscription?.current_period_end)}
+                </p>
+              </div>
+              <span className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-success/10 text-success">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Activo
+              </span>
+            </div>
+          ) : isPending ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-warning/10 border border-warning/20">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Pago pendiente</p>
+                  <p className="text-xs text-muted-foreground">Completa tu pago para activar el plan</p>
+                </div>
+                <span className="px-3 py-1 rounded-full text-xs font-medium bg-warning/10 text-warning">
+                  Pendiente
+                </span>
+              </div>
+              <a
+                href={subscription.payment_link_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Completar pago
+              </a>
+            </div>
+          ) : (
+            <button
+              onClick={handleSubscribe}
+              disabled={paying}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {paying ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <CreditCard className="w-4 h-4" />
+                  Suscribirse por $25.000 CLP/mes
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Payment history */}
+      {subscription && (
+        <div>
+          <h4 className="text-sm font-semibold text-foreground mb-3">Historial de pagos</h4>
+          <div className="rounded-lg border border-border overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 hover:bg-accent/30 transition-colors">
+              <div>
+                <p className="text-sm text-foreground">WorkFlow Pro</p>
+                <p className="text-xs text-muted-foreground">{formatDate(subscription.created_at)}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-foreground">$25.000 CLP</span>
+                <span className={cn(
+                  'px-2 py-0.5 rounded-full text-[10px] font-medium',
+                  subscription.status === 'active' ? 'bg-success/10 text-success'
+                    : subscription.status === 'pending' ? 'bg-warning/10 text-warning'
+                    : subscription.status === 'cancelled' ? 'bg-destructive/10 text-destructive'
+                    : subscription.status === 'expired' ? 'bg-muted text-muted-foreground'
+                    : 'bg-muted text-muted-foreground'
+                )}>
+                  {subscription.status === 'active' ? 'Pagado'
+                    : subscription.status === 'pending' ? 'Pendiente'
+                    : subscription.status === 'cancelled' ? 'Cancelado'
+                    : subscription.status === 'expired' ? 'Expirado'
+                    : subscription.status}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Powered by */}
+      <div className="pt-2 flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
+        <CreditCard className="w-3.5 h-3.5" />
+        Pagos procesados por AlohaPay
+      </div>
+    </div>
+  )
+}
+
 function NotificationSettings() {
   const [prefs, setPrefs] = useState(() => {
     const stored = localStorage.getItem('workflow-notification-prefs')
@@ -381,14 +693,11 @@ function NotificationSettings() {
       weeklyDigest: false,
     }
   })
-  const [saved, setSaved] = useState(false)
-
   const toggle = (key) => {
     const updated = { ...prefs, [key]: !prefs[key] }
     setPrefs(updated)
     localStorage.setItem('workflow-notification-prefs', JSON.stringify(updated))
-    setSaved(true)
-    setTimeout(() => setSaved(false), 1500)
+    toast.success('Notificación actualizada')
   }
 
   const NOTIFICATION_OPTIONS = [
@@ -406,13 +715,6 @@ function NotificationSettings() {
       <div>
         <h4 className="text-sm font-semibold text-foreground mb-1">Preferencias de notificaciones</h4>
         <p className="text-xs text-muted-foreground mb-4">Elige qué notificaciones quieres recibir</p>
-
-        {saved && (
-          <div className="flex items-center gap-1.5 mb-3 text-xs text-success animate-fade-in">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            Guardado automáticamente
-          </div>
-        )}
 
         <div className="space-y-1">
           {NOTIFICATION_OPTIONS.map(opt => (

@@ -48,14 +48,14 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
   const { notifyTaskAssigned } = useNotifications()
 
   const assignableUsers = useMemo(() => {
-    return state.members.map(m => ({
+    return state.orgMembers.map(m => ({
       id: m.id,
       name: m.name,
       email: m.email,
       avatar: m.avatar_url || (m.user_id === user?.id ? user?.user_metadata?.avatar_url : null),
       color: m.color || '#6c5ce7',
     }))
-  }, [user, state.members])
+  }, [user, state.orgMembers])
 
   const assignee = usePortalDropdown()
   const status = usePortalDropdown()
@@ -84,7 +84,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
   const handleAssigneeChange = async (memberId, memberName) => {
     await updateTask(task.id, { assignee_id: memberId, assignee_name: memberName })
     if (memberId) {
-      const member = state.members.find(m => m.id === memberId)
+      const member = state.orgMembers.find(m => m.id === memberId)
       notifyTaskAssigned({ task, assigneeMember: member, fromUser: user, workspaceId: state.currentWorkspace?.id })
     }
     assignee.setOpen(false)

@@ -12,7 +12,7 @@ import { toast } from 'sonner'
 
 const ROLE_OPTIONS = [
   { value: 'member', label: 'Miembro', description: 'Puede ver y editar tareas' },
-  { value: 'admin', label: 'Admin', description: 'Puede gestionar el espacio' },
+  { value: 'admin', label: 'Admin', description: 'Puede gestionar la organizacion' },
 ]
 
 const STATUS_CONFIG = {
@@ -32,31 +32,33 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
   const [success, setSuccess] = useState('')
   const [activeTab, setActiveTab] = useState('invite')
 
+  const currentOrg = state.currentOrg
+
   useEffect(() => {
-    if (isOpen && workspace) {
-      fetchInvites(workspace.id)
-      fetchMembers(workspace.id)
+    if (isOpen && currentOrg) {
+      fetchInvites(currentOrg.id)
+      fetchMembers(currentOrg.id)
       setError('')
       setSuccess('')
     }
-  }, [isOpen, workspace])
+  }, [isOpen, currentOrg?.id])
 
-  if (!isOpen || !workspace) return null
+  if (!isOpen || !currentOrg) return null
 
-  const isOwner = workspace.owner_id === user?.id
+  const isOwner = currentOrg.owner_id === user?.id
 
   const handleSendInvite = async () => {
     setError('')
     setSuccess('')
 
     if (!email.trim()) {
-      setError('Ingresa un correo electrónico')
+      setError('Ingresa un correo electronico')
       return
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
-      setError('Ingresa un correo válido')
+      setError('Ingresa un correo valido')
       return
     }
 
@@ -65,23 +67,23 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
       i => i.email === email.trim() && i.status === 'pending'
     )
     if (alreadyInvited) {
-      setError('Ya existe una invitación pendiente para este correo')
+      setError('Ya existe una invitacion pendiente para este correo')
       return
     }
 
-    // Check if already a member
-    const alreadyMember = state.members.find(m => m.email === email.trim())
+    // Check if already a member (orgMembers)
+    const alreadyMember = state.orgMembers.find(m => m.email === email.trim())
     if (alreadyMember) {
-      setError('Este usuario ya es miembro del espacio')
+      setError('Este usuario ya es miembro de la organizacion')
       return
     }
 
     setSending(true)
     const inviteEmail = email.trim().toLowerCase()
 
-    // 1. Save invite record in DB
+    // 1. Save invite record in DB (org_invites)
     const { error: inviteError } = await createInvite({
-      workspace_id: workspace.id,
+      org_id: currentOrg.id,
       email: inviteEmail,
       role,
       invited_by: user.id,
@@ -103,30 +105,29 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
       const { error: inviteEmailError } = await supabaseAdmin.auth.admin.inviteUserByEmail(inviteEmail, {
         redirectTo: window.location.origin,
         data: {
-          invited_to_workspace: workspace.name,
+          invited_to_org: currentOrg.name,
           invited_by: senderName,
           invited_by_initials: senderInitials,
         },
       })
 
       if (inviteEmailError) {
-        // If user already exists, that's fine — invite is saved
         if (inviteEmailError.message?.includes('already been registered')) {
-          const msg = `Invitación enviada a ${inviteEmail} (ya tiene cuenta)`
+          const msg = `Invitacion enviada a ${inviteEmail} (ya tiene cuenta)`
           setSuccess(msg)
           toast.success(msg)
         } else {
-          const msg = `Invitación guardada para ${inviteEmail} (el correo no pudo enviarse)`
+          const msg = `Invitacion guardada para ${inviteEmail} (el correo no pudo enviarse)`
           setSuccess(msg)
           toast.success(msg)
         }
       } else {
-        const msg = `Invitación enviada a ${inviteEmail}`
+        const msg = `Invitacion enviada a ${inviteEmail}`
         setSuccess(msg)
         toast.success(msg)
       }
     } else {
-      const msg = `Invitación guardada para ${inviteEmail}`
+      const msg = `Invitacion guardada para ${inviteEmail}`
       setSuccess(msg)
       toast.success(msg)
     }
@@ -134,13 +135,13 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
 
     setEmail('')
     setRole('member')
-    fetchInvites(workspace.id)
+    fetchInvites(currentOrg.id)
     setSending(false)
   }
 
   const handleDeleteInvite = async (inviteId) => {
     await deleteInvite(inviteId)
-    fetchInvites(workspace.id)
+    fetchInvites(currentOrg.id)
   }
 
   const pendingInvites = state.invites.filter(i => i.status === 'pending')
@@ -156,12 +157,12 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
           <div className="flex items-center gap-3">
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white"
-              style={{ backgroundColor: workspace.color || '#6c5ce7' }}
+              style={{ backgroundColor: currentOrg.color || '#6c5ce7' }}
             >
-              {workspace.name?.[0]?.toUpperCase()}
+              {currentOrg.name?.[0]?.toUpperCase()}
             </div>
             <div>
-              <h2 className="text-base font-semibold text-card-foreground">{workspace.name}</h2>
+              <h2 className="text-base font-semibold text-card-foreground">{currentOrg.name}</h2>
               <p className="text-xs text-muted-foreground">Gestionar miembros e invitaciones</p>
             </div>
           </div>
@@ -178,7 +179,7 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
           {[
             { id: 'invite', label: 'Invitar', icon: UserPlus },
             { id: 'pending', label: `Pendientes (${pendingInvites.length})`, icon: Clock },
-            { id: 'members', label: `Miembros (${state.members.length})`, icon: Users },
+            { id: 'members', label: `Miembros (${state.orgMembers.length})`, icon: Users },
           ].map(tab => (
             <button
               key={tab.id}
@@ -219,7 +220,7 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
 
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                  Correo electrónico
+                  Correo electronico
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -280,7 +281,7 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
                 ) : (
                   <>
                     <Send className="w-4 h-4" />
-                    Enviar invitación
+                    Enviar invitacion
                   </>
                 )}
               </button>
@@ -290,25 +291,29 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
           {/* Members Tab */}
           {activeTab === 'members' && (
             <div className="px-6 py-4">
-              {state.members.length === 0 ? (
+              {state.orgMembers.length === 0 ? (
                 <div className="text-center py-8">
                   <Users className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">No hay miembros todavía</p>
+                  <p className="text-sm text-muted-foreground">No hay miembros todavia</p>
                 </div>
               ) : (
                 <div className="space-y-1">
-                  {state.members.map(member => {
-                    const isOwner = member.user_id === workspace.owner_id
+                  {state.orgMembers.map(member => {
+                    const isMemberOwner = member.role === 'owner'
                     return (
                     <div key={member.id} className={cn(
                       'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors',
-                      isOwner ? 'bg-primary/5 border border-primary/10' : 'hover:bg-accent/50'
+                      isMemberOwner ? 'bg-primary/5 border border-primary/10' : 'hover:bg-accent/50'
                     )}>
                       <div
                         className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white"
                         style={{ backgroundColor: member.color || '#6c5ce7' }}
                       >
-                        {member.name?.[0]?.toUpperCase()}
+                        {member.avatar_url ? (
+                          <img src={member.avatar_url} alt="" className="w-full h-full rounded-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          member.name?.[0]?.toUpperCase()
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">{member.name}</p>
@@ -316,9 +321,9 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
                       </div>
                       <span className={cn(
                         'px-2 py-0.5 rounded-full text-[10px] font-medium capitalize',
-                        isOwner ? 'bg-primary/10 text-primary font-semibold' : 'bg-muted text-muted-foreground'
+                        isMemberOwner ? 'bg-primary/10 text-primary font-semibold' : 'bg-muted text-muted-foreground'
                       )}>
-                        {isOwner ? 'Owner' : member.role || 'member'}
+                        {member.role || 'member'}
                       </span>
                     </div>
                     )
@@ -370,7 +375,7 @@ export default function InviteModal({ isOpen, onClose, workspace }) {
                             <button
                               onClick={() => handleDeleteInvite(invite.id)}
                               className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
-                              title="Cancelar invitación"
+                              title="Cancelar invitacion"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>

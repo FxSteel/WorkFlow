@@ -5,11 +5,110 @@ import { useApp } from '../context/AppContext'
 export function useSupabase() {
   const { dispatch } = useApp()
 
-  const fetchWorkspaces = useCallback(async () => {
+  // --- Organizations ---
+
+  const fetchOrganizations = useCallback(async () => {
+    dispatch({ type: 'SET_LOADING', payload: true })
+    const { data, error } = await supabase
+      .from('organizations')
+      .select('*')
+      .order('created_at', { ascending: true })
+    if (!error && data) dispatch({ type: 'SET_ORGANIZATIONS', payload: data })
+    dispatch({ type: 'SET_LOADING', payload: false })
+    return { data, error }
+  }, [dispatch])
+
+  const createOrganization = useCallback(async (org) => {
+    const { data, error } = await supabase
+      .from('organizations')
+      .insert(org)
+      .select()
+      .single()
+    if (!error && data) {
+      dispatch({ type: 'ADD_ORGANIZATION', payload: data })
+
+      // Add owner as org_member
+      if (org.owner_id) {
+        const { data: userData } = await supabase.auth.getUser()
+        const ownerName = userData?.user?.user_metadata?.full_name
+          || userData?.user?.email?.split('@')[0]
+          || 'Admin'
+        const ownerEmail = userData?.user?.email || ''
+        await supabase
+          .from('org_members')
+          .insert({
+            org_id: data.id,
+            user_id: org.owner_id,
+            name: ownerName,
+            email: ownerEmail,
+            role: 'owner',
+            color: '#000000',
+          })
+      }
+
+      // Create default workspace "General"
+      const { data: wsData } = await supabase
+        .from('workspaces')
+        .insert({ name: 'General', owner_id: org.owner_id, color: org.color || '#6c5ce7', org_id: data.id })
+        .select()
+        .single()
+      if (wsData) {
+        dispatch({ type: 'ADD_WORKSPACE', payload: wsData })
+        // Create default board "Tareas" in the workspace
+        const { data: boardData } = await supabase
+          .from('boards')
+          .insert({ name: 'Tareas', workspace_id: wsData.id })
+          .select()
+          .single()
+        if (boardData) dispatch({ type: 'ADD_BOARD', payload: boardData })
+      }
+    }
+    return { data, error }
+  }, [dispatch])
+
+  const updateOrganization = useCallback(async (id, updates) => {
+    const { data, error } = await supabase
+      .from('organizations')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+    if (!error && data) {
+      dispatch({ type: 'UPDATE_ORGANIZATION', payload: data })
+    }
+    return { data, error }
+  }, [dispatch])
+
+  const deleteOrganization = useCallback(async (id) => {
+    const { error } = await supabase
+      .from('organizations')
+      .delete()
+      .eq('id', id)
+    if (!error) dispatch({ type: 'DELETE_ORGANIZATION', payload: id })
+    return { error }
+  }, [dispatch])
+
+  const fetchOrgMembers = useCallback(async (orgId) => {
+    const { data, error } = await supabase
+      .from('org_members')
+      .select('*')
+      .eq('org_id', orgId)
+      .order('name', { ascending: true })
+    if (!error && data) {
+      dispatch({ type: 'SET_ORG_MEMBERS', payload: data })
+    }
+    return { data, error }
+  }, [dispatch])
+
+  // --- Workspaces ---
+
+  const fetchWorkspaces = useCallback(async (orgId) => {
+    if (!orgId) return { data: null, error: null }
     dispatch({ type: 'SET_LOADING', payload: true })
     const { data, error } = await supabase
       .from('workspaces')
       .select('*')
+      .eq('org_id', orgId)
       .order('created_at', { ascending: true })
     if (!error && data) dispatch({ type: 'SET_WORKSPACES', payload: data })
     dispatch({ type: 'SET_LOADING', payload: false })
@@ -46,11 +145,12 @@ export function useSupabase() {
     return { data, error }
   }, [dispatch])
 
-  const fetchMembers = useCallback(async (workspaceId) => {
+  const fetchMembers = useCallback(async (orgId) => {
+    // Now fetches from org_members instead of members
     const { data, error } = await supabase
-      .from('members')
+      .from('org_members')
       .select('*')
-      .eq('workspace_id', workspaceId)
+      .eq('org_id', orgId)
       .order('name', { ascending: true })
 
     if (!error && data) {
@@ -76,25 +176,6 @@ export function useSupabase() {
         .select()
         .single()
       if (boardData) dispatch({ type: 'ADD_BOARD', payload: boardData })
-
-      // Add owner as member of the workspace
-      if (workspace.owner_id) {
-        const { data: userData } = await supabase.auth.getUser()
-        const ownerName = userData?.user?.user_metadata?.full_name
-          || userData?.user?.email?.split('@')[0]
-          || 'Admin'
-        const ownerEmail = userData?.user?.email || ''
-        await supabase
-          .from('members')
-          .insert({
-            workspace_id: data.id,
-            user_id: workspace.owner_id,
-            name: ownerName,
-            email: ownerEmail,
-            role: 'admin',
-            color: '#000000',
-          })
-      }
     }
     return { data, error }
   }, [dispatch])
@@ -217,13 +298,13 @@ export function useSupabase() {
     return { error }
   }, [dispatch])
 
-  // --- Invites ---
+  // --- Invites (org_invites) ---
 
-  const fetchInvites = useCallback(async (workspaceId) => {
+  const fetchInvites = useCallback(async (orgId) => {
     const { data, error } = await supabase
-      .from('workspace_invites')
+      .from('org_invites')
       .select('*')
-      .eq('workspace_id', workspaceId)
+      .eq('org_id', orgId)
       .order('created_at', { ascending: false })
     if (!error && data) dispatch({ type: 'SET_INVITES', payload: data })
     return { data, error }
@@ -231,7 +312,7 @@ export function useSupabase() {
 
   const createInvite = useCallback(async (invite) => {
     const { data, error } = await supabase
-      .from('workspace_invites')
+      .from('org_invites')
       .insert(invite)
       .select()
       .single()
@@ -241,19 +322,19 @@ export function useSupabase() {
 
   const deleteInvite = useCallback(async (id) => {
     const { error } = await supabase
-      .from('workspace_invites')
+      .from('org_invites')
       .delete()
       .eq('id', id)
     if (!error) dispatch({ type: 'DELETE_INVITE', payload: id })
     return { error }
   }, [dispatch])
 
-  const acceptInvite = useCallback(async (inviteId, workspaceId, userId, userName, userEmail) => {
-    // Add user as member
+  const acceptInvite = useCallback(async (inviteId, orgId, userId, userName, userEmail) => {
+    // Add user as org_member
     const { error: memberError } = await supabase
-      .from('members')
+      .from('org_members')
       .insert({
-        workspace_id: workspaceId,
+        org_id: orgId,
         user_id: userId,
         name: userName,
         email: userEmail,
@@ -264,7 +345,7 @@ export function useSupabase() {
 
     // Update invite status
     const { error: inviteError } = await supabase
-      .from('workspace_invites')
+      .from('org_invites')
       .update({ status: 'accepted' })
       .eq('id', inviteId)
     return { error: inviteError }
@@ -272,7 +353,7 @@ export function useSupabase() {
 
   const declineInvite = useCallback(async (inviteId) => {
     const { error } = await supabase
-      .from('workspace_invites')
+      .from('org_invites')
       .update({ status: 'declined' })
       .eq('id', inviteId)
     return { error }
@@ -280,8 +361,8 @@ export function useSupabase() {
 
   const fetchMyInvites = useCallback(async (email) => {
     const { data, error } = await supabase
-      .from('workspace_invites')
-      .select('*, workspaces(name, color)')
+      .from('org_invites')
+      .select('*, organizations(name, color)')
       .eq('email', email)
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
@@ -289,6 +370,11 @@ export function useSupabase() {
   }, [])
 
   return {
+    fetchOrganizations,
+    createOrganization,
+    updateOrganization,
+    deleteOrganization,
+    fetchOrgMembers,
     fetchWorkspaces,
     fetchBoards,
     fetchSprints,

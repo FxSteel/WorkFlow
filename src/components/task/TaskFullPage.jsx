@@ -37,14 +37,14 @@ export default function TaskFullPage() {
   const [saved, setSaved] = useState(false)
 
   const assignableUsers = useMemo(() => {
-    return state.members.map(m => ({
+    return state.orgMembers.map(m => ({
       id: m.id,
       name: m.name,
       email: m.email,
       avatar: m.avatar_url || (m.user_id === user?.id ? user?.user_metadata?.avatar_url : null),
       color: m.color || '#6c5ce7',
     }))
-  }, [user, state.members])
+  }, [user, state.orgMembers])
 
   useEffect(() => {
     if (sourceTask) {

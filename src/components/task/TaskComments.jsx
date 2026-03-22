@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Paperclip, AtSign, Send, Loader2, X, FileText, Image as ImageIcon } from 'lucide-react'
+import { Paperclip, AtSign, Send, Loader2, X, FileText, Image as ImageIcon, ChevronDown, ChevronRight, MessageSquare } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useApp } from '../../context/AppContext'
 import { supabase } from '../../lib/supabase'
@@ -54,7 +54,7 @@ export default function TaskComments({ taskId }) {
     return () => document.removeEventListener('mousedown', close)
   }, [])
 
-  const filteredMembers = state.members.filter(m =>
+  const filteredMembers = state.orgMembers.filter(m =>
     m.name.toLowerCase().includes(mentionFilter.toLowerCase())
   )
 
@@ -159,7 +159,7 @@ export default function TaskComments({ taskId }) {
 
     // Extract @mentions by matching member names in the text
     const mentions = []
-    state.members.forEach(member => {
+    state.orgMembers.forEach(member => {
       if (text.includes(`@${member.name}`)) {
         mentions.push({ id: member.id, name: member.name })
       }
@@ -183,7 +183,7 @@ export default function TaskComments({ taskId }) {
       toast.success('Comentario publicado')
       // Send notifications for @mentions
       for (const mentioned of mentions) {
-        const member = state.members.find(m => m.id === mentioned.id)
+        const member = state.orgMembers.find(m => m.id === mentioned.id)
         const task = state.tasks.find(t => t.id === taskId)
         if (member) {
           notifyMention({
@@ -199,7 +199,7 @@ export default function TaskComments({ taskId }) {
       // Notify task assignee about comment (if not the commenter)
       const task = state.tasks.find(t => t.id === taskId)
       if (task?.assignee_id) {
-        const assigneeMember = state.members.find(m => m.id === task.assignee_id)
+        const assigneeMember = state.orgMembers.find(m => m.id === task.assignee_id)
         notifyComment({ task, fromUser: user, workspaceId: state.currentWorkspace?.id, assigneeMember })
       }
 
@@ -223,7 +223,7 @@ export default function TaskComments({ taskId }) {
 
   const renderContent = (content) => {
     // Build regex from member names to match full names after @
-    const memberNames = state.members.map(m => m.name).filter(Boolean).sort((a, b) => b.length - a.length)
+    const memberNames = state.orgMembers.map(m => m.name).filter(Boolean).sort((a, b) => b.length - a.length)
     if (memberNames.length === 0) return content
 
     const pattern = new RegExp(`(@(?:${memberNames.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')}))`, 'g')
@@ -245,6 +245,11 @@ export default function TaskComments({ taskId }) {
 
   if (!taskId) return null
 
+  const [expanded, setExpanded] = useState(false)
+  const hasHidden = comments.length > 2
+  const visibleComments = hasHidden && !expanded ? comments.slice(-2) : comments
+  const hiddenCount = comments.length - 2
+
   return (
     <div>
       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
@@ -256,9 +261,29 @@ export default function TaskComments({ taskId }) {
         <div className="text-xs text-muted-foreground py-2">Cargando...</div>
       ) : (
         <div className="space-y-4 mb-4">
-          {comments.map(comment => {
+          {/* Show older comments toggle */}
+          {hasHidden && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
+            >
+              {expanded ? (
+                <>
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  Ocultar comentarios anteriores
+                </>
+              ) : (
+                <>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                  Ver {hiddenCount} comentario{hiddenCount > 1 ? 's' : ''} anterior{hiddenCount > 1 ? 'es' : ''}
+                </>
+              )}
+            </button>
+          )}
+
+          {visibleComments.map(comment => {
             const files = comment.attachments ? JSON.parse(comment.attachments) : []
-            const commentMember = state.members.find(m => m.user_id === comment.user_id)
+            const commentMember = state.orgMembers.find(m => m.user_id === comment.user_id)
             const commentAvatar = commentMember?.avatar_url || comment.user_avatar
             const commentColor = commentMember?.color || '#6c5ce7'
             return (

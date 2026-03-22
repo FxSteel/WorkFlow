@@ -3,13 +3,16 @@ import { createContext, useContext, useReducer, useCallback } from 'react'
 const AppContext = createContext()
 
 const initialState = {
+  organizations: [],
+  currentOrg: null,
+  orgMembers: [],
   workspaces: [],
   currentWorkspace: null,
   boards: [],
   currentBoard: null,
   sprints: [],
   tasks: [],
-  members: [],
+  members: [], // deprecated alias — reads from orgMembers
   invites: [],
   selectedTask: null,
   sidePanelTask: null,
@@ -21,6 +24,43 @@ const initialState = {
 
 function appReducer(state, action) {
   switch (action.type) {
+    // --- Organizations ---
+    case 'SET_ORGANIZATIONS':
+      return { ...state, organizations: action.payload }
+    case 'SET_CURRENT_ORG':
+      return { ...state, currentOrg: action.payload }
+    case 'SET_ORG_MEMBERS':
+      return { ...state, orgMembers: action.payload, members: action.payload }
+    case 'ADD_ORGANIZATION':
+      return { ...state, organizations: [...state.organizations, action.payload] }
+    case 'UPDATE_ORGANIZATION': {
+      const organizations = state.organizations.map(o =>
+        o.id === action.payload.id ? { ...o, ...action.payload } : o
+      )
+      const currentOrg = state.currentOrg?.id === action.payload.id
+        ? { ...state.currentOrg, ...action.payload }
+        : state.currentOrg
+      return { ...state, organizations, currentOrg }
+    }
+    case 'DELETE_ORGANIZATION': {
+      const organizations = state.organizations.filter(o => o.id !== action.payload)
+      const isCurrent = state.currentOrg?.id === action.payload
+      return {
+        ...state,
+        organizations,
+        currentOrg: isCurrent ? null : state.currentOrg,
+        workspaces: isCurrent ? [] : state.workspaces,
+        currentWorkspace: isCurrent ? null : state.currentWorkspace,
+        currentBoard: isCurrent ? null : state.currentBoard,
+        boards: isCurrent ? [] : state.boards,
+        sprints: isCurrent ? [] : state.sprints,
+        tasks: isCurrent ? [] : state.tasks,
+        orgMembers: isCurrent ? [] : state.orgMembers,
+        members: isCurrent ? [] : state.members,
+      }
+    }
+
+    // --- Workspaces ---
     case 'SET_WORKSPACES':
       return { ...state, workspaces: action.payload }
     case 'SET_CURRENT_WORKSPACE':
@@ -28,7 +68,6 @@ function appReducer(state, action) {
     case 'SET_BOARDS':
       return { ...state, boards: action.payload }
     case 'MERGE_BOARDS': {
-      // Replace boards for a specific workspace, keep others
       const { workspaceId, boards: newBoards } = action.payload
       const otherBoards = state.boards.filter(b => b.workspace_id !== workspaceId)
       return { ...state, boards: [...otherBoards, ...newBoards] }
@@ -40,7 +79,7 @@ function appReducer(state, action) {
     case 'SET_TASKS':
       return { ...state, tasks: action.payload }
     case 'SET_MEMBERS':
-      return { ...state, members: action.payload }
+      return { ...state, members: action.payload, orgMembers: action.payload }
     case 'SET_INVITES':
       return { ...state, invites: action.payload }
     case 'UPDATE_TASK': {
@@ -103,7 +142,6 @@ function appReducer(state, action) {
         boards: isCurrent ? [] : state.boards,
         sprints: isCurrent ? [] : state.sprints,
         tasks: isCurrent ? [] : state.tasks,
-        members: isCurrent ? [] : state.members,
       }
     }
     case 'ADD_BOARD':

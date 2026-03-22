@@ -19,6 +19,9 @@ import SetupPassword from './components/auth/SetupPassword'
 import { Loader2 } from 'lucide-react'
 import { Toaster } from 'sonner'
 import { usePresence } from './hooks/usePresence'
+import { useSubscription } from './hooks/useSubscription'
+import Paywall from './components/billing/Paywall'
+import AdminPanel from './components/admin/AdminPanel'
 
 function getTaskEditorPref() {
   return localStorage.getItem('workflow-task-editor-view') || 'sidebar'
@@ -28,18 +31,41 @@ function AppContent() {
   const { state, dispatch, openTask } = useApp()
   const { user, signOut } = useAuth()
   usePresence(user?.id)
-  const { fetchWorkspaces, fetchBoards } = useSupabase()
+  const { fetchOrganizations, fetchWorkspaces, fetchBoards, fetchOrgMembers } = useSupabase()
   const [showSprintModal, setShowSprintModal] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
   const [inviteModal, setInviteModal] = useState({ open: false, workspace: null })
 
+  // Fetch organizations on load
   useEffect(() => {
-    fetchWorkspaces()
+    fetchOrganizations()
   }, [])
 
-  // Fetch boards for all workspaces on load
+  // Auto-select first org if none selected
+  useEffect(() => {
+    if (state.organizations.length > 0 && !state.currentOrg) {
+      // Try to restore from localStorage
+      const savedOrgId = localStorage.getItem('workflow-current-org')
+      const savedOrg = savedOrgId ? state.organizations.find(o => o.id === savedOrgId) : null
+      dispatch({ type: 'SET_CURRENT_ORG', payload: savedOrg || state.organizations[0] })
+    }
+  }, [state.organizations])
+
+  // When org changes, fetch its workspaces and members
+  useEffect(() => {
+    if (state.currentOrg) {
+      localStorage.setItem('workflow-current-org', state.currentOrg.id)
+      fetchWorkspaces(state.currentOrg.id)
+      fetchOrgMembers(state.currentOrg.id)
+      // Reset board selection when org changes
+      dispatch({ type: 'SET_CURRENT_BOARD', payload: null })
+      dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: null })
+    }
+  }, [state.currentOrg?.id])
+
+  // Fetch boards for all workspaces when workspaces load
   useEffect(() => {
     state.workspaces.forEach(ws => fetchBoards(ws.id))
   }, [state.workspaces])
@@ -141,6 +167,32 @@ function AuthenticatedApp() {
 
   if (needsPassword) {
     return <SetupPassword />
+  }
+
+  // Secret admin panel — no link in the app
+  if (window.location.pathname === '/wf-admin-panel') {
+    return <AdminPanel />
+  }
+
+  return <SubscriptionGate user={user} />
+}
+
+function SubscriptionGate({ user }) {
+  const { hasAccess } = useSubscription(user?.id)
+
+  if (hasAccess === null) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          <span className="text-sm text-muted-foreground">Verificando suscripcion...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (!hasAccess) {
+    return <Paywall />
   }
 
   return (

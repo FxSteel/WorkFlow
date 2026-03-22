@@ -17,7 +17,7 @@ export function usePresence(userId) {
     localStorage.setItem('workflow-user-status', status)
 
     await supabase
-      .from('members')
+      .from('org_members')
       .update({ status, last_active: new Date().toISOString() })
       .eq('user_id', userId)
   }, [userId])
@@ -29,7 +29,7 @@ export function usePresence(userId) {
     lastDbUpdate.current = now
 
     await supabase
-      .from('members')
+      .from('org_members')
       .update({ last_active: new Date().toISOString() })
       .eq('user_id', userId)
   }, [userId])
@@ -86,7 +86,7 @@ export function usePresence(userId) {
     // Set offline/invisible on tab close
     const handleBeforeUnload = () => {
       navigator.sendBeacon?.(
-        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/members?user_id=eq.${userId}`,
+        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/org_members?user_id=eq.${userId}`,
         JSON.stringify({ status: 'invisible', last_active: new Date().toISOString() })
       )
     }

@@ -43,7 +43,7 @@ export default function ProfileModal({ isOpen, onClose }) {
         // Update auth user metadata
         await supabase.auth.updateUser({ data: { avatar_url: url } })
         // Update member records
-        await supabase.from('members').update({ avatar_url: url }).eq('user_id', user.id)
+        await supabase.from('org_members').update({ avatar_url: url }).eq('user_id', user.id)
         toast.success('Foto actualizada')
         showSaved()
       }
@@ -54,7 +54,7 @@ export default function ProfileModal({ isOpen, onClose }) {
   const handleRemoveAvatar = async () => {
     setAvatar('')
     await supabase.auth.updateUser({ data: { avatar_url: '' } })
-    await supabase.from('members').update({ avatar_url: null }).eq('user_id', user.id)
+    await supabase.from('org_members').update({ avatar_url: null }).eq('user_id', user.id)
     toast.success('Foto eliminada')
     showSaved()
   }
@@ -63,7 +63,7 @@ export default function ProfileModal({ isOpen, onClose }) {
     if (!name.trim()) return
     setSaving(true)
     await supabase.auth.updateUser({ data: { full_name: name.trim() } })
-    await supabase.from('members').update({ name: name.trim() }).eq('user_id', user.id)
+    await supabase.from('org_members').update({ name: name.trim() }).eq('user_id', user.id)
     setSaving(false)
     toast.success('Nombre actualizado')
     showSaved()

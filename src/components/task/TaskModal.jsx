@@ -19,14 +19,14 @@ export default function TaskModal() {
   // Always use member.id (members table PK) for assignee_id
   // Current user should be in members list as admin
   const assignableUsers = useMemo(() => {
-    return state.members.map(m => ({
+    return state.orgMembers.map(m => ({
       id: m.id,
       name: m.name,
       email: m.email,
       avatar: m.avatar_url || (m.user_id === user?.id ? user?.user_metadata?.avatar_url : null),
       color: m.color || '#6c5ce7',
     }))
-  }, [user, state.members])
+  }, [user, state.orgMembers])
 
   const isNew = !task?.id
   const [form, setForm] = useState({

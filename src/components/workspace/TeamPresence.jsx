@@ -9,7 +9,7 @@ const STATUS_ORDER = { online: 0, idle: 1, dnd: 2, invisible: 3 }
 const OFFLINE_THRESHOLD = 5 * 60 * 1000 // 5 min without heartbeat = offline
 
 const STATUS_INDICATOR = {
-  online: { color: 'bg-emerald-500', label: 'En línea' },
+  online: { color: 'bg-emerald-500', label: 'En linea' },
   idle: { color: 'bg-yellow-500', label: 'Ausente' },
   dnd: { color: 'bg-red-500', label: 'No molestar' },
   invisible: { color: 'bg-gray-400', label: 'Desconectado' },
@@ -22,23 +22,23 @@ export default function TeamPresence() {
   const [members, setMembers] = useState([])
   const [collapsed, setCollapsed] = useState({ online: false, offline: false })
 
-  // Fetch members with presence for current workspace
+  // Fetch members with presence for current org
   useEffect(() => {
-    if (!state.currentWorkspace) {
+    if (!state.currentOrg) {
       setMembers([])
       return
     }
     fetchPresence()
     const interval = setInterval(fetchPresence, 15000)
     return () => clearInterval(interval)
-  }, [state.currentWorkspace?.id])
+  }, [state.currentOrg?.id])
 
   const fetchPresence = async () => {
-    if (!state.currentWorkspace) return
+    if (!state.currentOrg) return
     const { data } = await supabase
-      .from('members')
+      .from('org_members')
       .select('*')
-      .eq('workspace_id', state.currentWorkspace.id)
+      .eq('org_id', state.currentOrg.id)
       .order('name')
     if (data) setMembers(data)
   }
@@ -79,7 +79,7 @@ export default function TeamPresence() {
         className="w-full flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
       >
         {collapsed.online ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-        En línea — {onlineMembers.length}
+        En linea — {onlineMembers.length}
       </button>
 
       {!collapsed.online && (
@@ -88,7 +88,7 @@ export default function TeamPresence() {
             <MemberRow key={member.id} member={member} isCurrentUser={member.user_id === user?.id} />
           ))}
           {onlineMembers.length === 0 && (
-            <p className="px-2 py-1 text-[11px] text-muted-foreground/50">Nadie en línea</p>
+            <p className="px-2 py-1 text-[11px] text-muted-foreground/50">Nadie en linea</p>
           )}
         </div>
       )}
@@ -162,14 +162,14 @@ function MemberRow({ member, isCurrentUser }) {
           member.effectiveStatus === 'offline' ? 'text-muted-foreground/60' : 'text-sidebar-foreground'
         )}>
           {member.name}
-          {isCurrentUser && <span className="text-muted-foreground ml-1">(tú)</span>}
+          {isCurrentUser && <span className="text-muted-foreground ml-1">(tu)</span>}
         </p>
       </div>
 
       {/* Role badge */}
-      {member.role === 'admin' && (
+      {(member.role === 'admin' || member.role === 'owner') && (
         <span className="text-[9px] text-muted-foreground bg-muted px-1 py-0.5 rounded">
-          {member.user_id === member.workspace_id ? 'Owner' : 'Admin'}
+          {member.role === 'owner' ? 'Owner' : 'Admin'}
         </span>
       )}
     </div>

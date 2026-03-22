@@ -19,7 +19,7 @@ const TYPE_CONFIG = {
 export default function NotificationCenter() {
   const { user } = useAuth()
   const { state, dispatch, openTask } = useApp()
-  const { fetchMyInvites, acceptInvite, declineInvite, fetchWorkspaces } = useSupabase()
+  const { fetchMyInvites, acceptInvite, declineInvite, fetchOrganizations } = useSupabase()
   const [isOpen, setIsOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [invites, setInvites] = useState([])
@@ -74,9 +74,9 @@ export default function NotificationCenter() {
   const handleAcceptInvite = async (invite) => {
     setLoadingId(invite.id)
     const userName = user.user_metadata?.full_name || user.email.split('@')[0]
-    await acceptInvite(invite.id, invite.workspace_id, user.id, userName, user.email)
+    await acceptInvite(invite.id, invite.org_id, user.id, userName, user.email)
     setInvites(prev => prev.filter(i => i.id !== invite.id))
-    await fetchWorkspaces()
+    await fetchOrganizations()
     setLoadingId(null)
   }
 
@@ -199,7 +199,7 @@ export default function NotificationCenter() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-foreground">
-                              Te invitaron a <span className="font-semibold">{invite.workspaces?.name || 'Workspace'}</span>
+                              Te invitaron a <span className="font-semibold">{invite.organizations?.name || 'Organizacion'}</span>
                             </p>
                             <p className="text-[11px] text-muted-foreground mt-0.5">
                               Por: {invite.invited_by_name}
