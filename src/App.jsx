@@ -18,6 +18,7 @@ import AuthPage from './components/auth/AuthPage'
 import SetupPassword from './components/auth/SetupPassword'
 import { Loader2 } from 'lucide-react'
 import { Toaster } from 'sonner'
+import { usePresence } from './hooks/usePresence'
 
 function getTaskEditorPref() {
   return localStorage.getItem('workflow-task-editor-view') || 'sidebar'
@@ -26,6 +27,7 @@ function getTaskEditorPref() {
 function AppContent() {
   const { state, dispatch, openTask } = useApp()
   const { user, signOut } = useAuth()
+  usePresence(user?.id)
   const { fetchWorkspaces, fetchBoards } = useSupabase()
   const [showSprintModal, setShowSprintModal] = useState(false)
   const [showSearch, setShowSearch] = useState(false)

@@ -121,7 +121,7 @@ export default function Topbar({ onNewTask, onNewSprint, onOpenSettings, onOpenP
           </div>
         ) : (
           <h1 className="text-lg font-semibold text-foreground">
-            {state.currentWorkspace ? state.currentWorkspace.name : 'Selecciona un espacio de trabajo'}
+            {state.currentWorkspace ? state.currentWorkspace.name : ''}
           </h1>
         )}
       </div>

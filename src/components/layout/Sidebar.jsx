@@ -22,6 +22,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import { cn } from '../../lib/utils'
 import SidebarSkeleton from '../skeleton/SidebarSkeleton'
+import TeamPresence from '../workspace/TeamPresence'
 import { toast } from 'sonner'
 
 const WORKSPACE_COLORS = [
@@ -211,6 +212,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
       {!collapsed && (
         <div className="p-2 space-y-0.5">
           <SidebarItem icon={Home} label="Inicio" onClick={() => {
+            dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: null })
             dispatch({ type: 'SET_CURRENT_BOARD', payload: null })
           }} />
           <SidebarItem icon={Search} label="Buscar" onClick={onOpenSearch} shortcut="⌘L" />
@@ -426,6 +428,9 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
           </div>
         )}
       </div>
+
+      {/* Team Presence — only when a workspace is selected */}
+      {!collapsed && state.currentWorkspace && <TeamPresence />}
 
       {/* ========== CONTEXT MENU ========== */}
       {ctxMenu && ctxMenu.data && (

@@ -23,6 +23,7 @@ export default function HomePage() {
   const { state, dispatch, openTask } = useApp()
   const { user } = useAuth()
   const [upcomingTasks, setUpcomingTasks] = useState([])
+  const [overdueTasks, setOverdueTasks] = useState([])
   const [recentBoards, setRecentBoards] = useState([])
   const [loadingTasks, setLoadingTasks] = useState(true)
   const carouselRef = useRef(null)
@@ -45,22 +46,34 @@ export default function HomePage() {
 
   // Fetch upcoming tasks across all workspaces
   useEffect(() => {
-    async function fetchUpcoming() {
+    async function fetchTasks() {
       setLoadingTasks(true)
-      const today = new Date().toISOString().split('T')[0]
-      const { data, error } = await supabase
+      const now = new Date()
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+
+      // Fetch upcoming (today + future)
+      const { data: upcoming } = await supabase
         .from('tasks')
         .select('*, boards(name, workspace_id, workspaces(name, color))')
         .gte('due_date', today)
         .neq('status', 'Completado')
         .order('due_date', { ascending: true })
         .limit(20)
-      if (!error && data) {
-        setUpcomingTasks(data)
-      }
+
+      // Fetch overdue (past date, not completed)
+      const { data: overdue } = await supabase
+        .from('tasks')
+        .select('*, boards(name, workspace_id, workspaces(name, color))')
+        .lt('due_date', today)
+        .neq('status', 'Completado')
+        .order('due_date', { ascending: true })
+        .limit(20)
+
+      if (upcoming) setUpcomingTasks(upcoming)
+      if (overdue) setOverdueTasks(overdue)
       setLoadingTasks(false)
     }
-    fetchUpcoming()
+    fetchTasks()
   }, [])
 
   const scrollCarousel = (direction) => {
@@ -113,8 +126,10 @@ export default function HomePage() {
       <div className="max-w-4xl mx-auto px-6 py-8">
         {/* Greeting */}
         <div className="mb-8 animate-fade-in">
-          <h1 className="text-3xl font-bold text-foreground">{greeting},</h1>
-          <h2 className="text-3xl font-bold text-muted-foreground">{userName}</h2>
+          <h1 className="text-3xl font-bold">
+            <span className="text-foreground">{greeting}, </span>
+            <span className="text-muted-foreground">{userName}</span>
+          </h1>
         </div>
 
         {/* Recent Boards Carousel */}
@@ -186,6 +201,84 @@ export default function HomePage() {
                       </div>
                     </div>
                   </button>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Overdue Tasks */}
+        {overdueTasks.length > 0 && (
+          <section className="mb-10 animate-fade-in">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertCircle className="w-4 h-4 text-destructive" />
+              <h3 className="text-sm font-semibold text-destructive">Tareas atrasadas</h3>
+              <span className="text-xs text-destructive/70">
+                ({overdueTasks.length})
+              </span>
+            </div>
+
+            <div className="rounded-xl border border-destructive/30 overflow-hidden bg-card">
+              <div className="grid grid-cols-[1fr_140px_100px_100px_90px] gap-0 bg-destructive/5 border-b border-destructive/20 text-[11px] font-semibold text-destructive/70 uppercase tracking-wider">
+                <div className="px-4 py-2.5">Tarea</div>
+                <div className="px-3 py-2.5">Workspace</div>
+                <div className="px-3 py-2.5 text-center">Estado</div>
+                <div className="px-3 py-2.5 text-center">Prioridad</div>
+                <div className="px-3 py-2.5 text-center">Atraso</div>
+              </div>
+
+              {overdueTasks.map(task => {
+                const priority = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium
+                const workspaceName = task.boards?.workspaces?.name || ''
+                const workspaceColor = task.boards?.workspaces?.color || '#6c5ce7'
+                const boardName = task.boards?.name || ''
+                const daysOverdue = getDaysUntil(task.due_date)
+
+                return (
+                  <div
+                    key={task.id}
+                    className="grid grid-cols-[1fr_140px_100px_100px_90px] gap-0 border-b border-border last:border-b-0 hover:bg-destructive/5 transition-colors text-sm cursor-pointer"
+                    onClick={() => {
+                      const wsId = task.boards?.workspace_id
+                      const ws = state.workspaces.find(w => w.id === wsId)
+                      if (ws) dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: ws })
+                      if (task.boards) dispatch({ type: 'SET_CURRENT_BOARD', payload: { id: task.board_id, name: task.boards.name, workspace_id: wsId } })
+                      openTask(task)
+                    }}
+                  >
+                    <div className="px-4 py-3 flex items-center gap-2 min-w-0">
+                      <div className="min-w-0">
+                        <p className="text-foreground truncate font-medium text-[13px] hover:text-primary transition-colors">{task.title}</p>
+                        {boardName && (
+                          <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
+                            <LayoutDashboard className="w-3 h-3 shrink-0" />
+                            {boardName}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="px-3 py-3 flex items-center gap-1.5 min-w-0">
+                      <div className="w-4 h-4 rounded shrink-0 flex items-center justify-center text-[8px] font-bold text-white" style={{ backgroundColor: workspaceColor }}>
+                        {workspaceName?.[0]?.toUpperCase()}
+                      </div>
+                      <span className="text-xs text-muted-foreground truncate">{workspaceName}</span>
+                    </div>
+                    <div className="px-3 py-3 flex items-center justify-center">
+                      <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-medium text-white whitespace-nowrap', STATUS_COLORS[task.status] || 'bg-gray-400')}>
+                        {task.status}
+                      </span>
+                    </div>
+                    <div className="px-3 py-3 flex items-center justify-center">
+                      <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap', priority.color, priority.text)}>
+                        {priority.label}
+                      </span>
+                    </div>
+                    <div className="px-3 py-3 flex items-center justify-center">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium text-destructive bg-destructive/10 whitespace-nowrap">
+                        {Math.abs(daysOverdue)}d atraso
+                      </span>
+                    </div>
+                  </div>
                 )
               })}
             </div>
