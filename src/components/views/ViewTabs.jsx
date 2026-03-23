@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Table2, CalendarDays, Columns3, GanttChart, LayoutGrid, Clock,
-  Plus, X, ChevronDown,
+  Plus, X, ChevronDown, Filter, SortAsc, Settings2,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
@@ -16,7 +16,7 @@ const ALL_VIEWS = [
 
 export { ALL_VIEWS }
 
-export default function ViewTabs({ activeViews, activeView, onChangeView, onAddView, onRemoveView }) {
+export default function ViewTabs({ activeViews, activeView, onChangeView, onAddView, onRemoveView, onOpenStatusConfig }) {
   const [showAddMenu, setShowAddMenu] = useState(false)
   const menuRef = useRef(null)
 
@@ -109,6 +109,28 @@ export default function ViewTabs({ activeViews, activeView, onChangeView, onAddV
           )}
         </div>
       )}
+
+      {/* Filter, Sort, Status Config — right aligned */}
+      <div className="flex-1" />
+      <div className="flex items-center gap-1 pb-0.5">
+        <button className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+          <Filter className="w-3.5 h-3.5" />
+          Filtrar
+        </button>
+        <button className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+          <SortAsc className="w-3.5 h-3.5" />
+          Ordenar
+        </button>
+        {onOpenStatusConfig && (
+          <button
+            onClick={onOpenStatusConfig}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          >
+            <Settings2 className="w-3.5 h-3.5" />
+            Estados
+          </button>
+        )}
+      </div>
     </div>
   )
 }

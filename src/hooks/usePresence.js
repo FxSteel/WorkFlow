@@ -10,6 +10,23 @@ export function usePresence(userId) {
   const lastDbUpdate = useRef(0)
   const currentStatus = useRef('online')
   const idleTimer = useRef(null)
+  const avatarSynced = useRef(false)
+
+  // Sync avatar from auth metadata to org_members on first load
+  const syncAvatar = useCallback(async () => {
+    if (!userId || avatarSynced.current) return
+    avatarSynced.current = true
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const avatar = user?.user_metadata?.avatar_url
+      if (avatar) {
+        await supabase
+          .from('org_members')
+          .update({ avatar_url: avatar })
+          .eq('user_id', userId)
+      }
+    } catch (e) { /* silent */ }
+  }, [userId])
 
   const updateStatus = useCallback(async (status) => {
     if (!userId || currentStatus.current === status) return
@@ -61,7 +78,8 @@ export function usePresence(userId) {
   useEffect(() => {
     if (!userId) return
 
-    // Set online on mount
+    // Sync avatar and set online on mount
+    syncAvatar()
     updateStatus('online')
     lastDbUpdate.current = Date.now()
 
@@ -116,5 +134,5 @@ export function usePresence(userId) {
       window.removeEventListener('beforeunload', handleBeforeUnload)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [userId, handleActivity, updateStatus, updateLastActive])
+  }, [userId, handleActivity, updateStatus, updateLastActive, syncAvatar])
 }

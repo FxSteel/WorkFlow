@@ -244,21 +244,22 @@ export default function TaskFullPage() {
             {/* Status */}
             <PropertyRow icon={Tag} label="Estado">
               <div className="flex items-center gap-1.5 flex-wrap">
-                {STATUS_OPTIONS.map(s => (
+                {(state.boardStatuses || []).map(s => (
                   <button
-                    key={s}
+                    key={s.id}
                     onClick={() => {
-                      handleChange('status', s)
-                      if (!isNew && sourceTask?.id) updateTask(sourceTask.id, { status: s })
+                      handleChange('status', s.name)
+                      if (!isNew && sourceTask?.id) updateTask(sourceTask.id, { status: s.name })
                     }}
                     className={cn(
                       'px-2.5 py-1 rounded-full text-xs font-medium transition-all',
-                      form.status === s
-                        ? cn(STATUS_COLORS[s], 'text-white')
+                      form.status === s.name
+                        ? 'text-white'
                         : 'bg-muted text-muted-foreground hover:bg-accent'
                     )}
+                    style={form.status === s.name ? { backgroundColor: s.color } : {}}
                   >
-                    {s}
+                    {s.name}
                   </button>
                 ))}
               </div>
@@ -300,14 +301,14 @@ export default function TaskFullPage() {
             {/* Sprint */}
             <PropertyRow icon={Layers} label="Sprint">
               <Select
-                value={form.sprint_id || '_backlog'}
-                onValueChange={(val) => handleFieldSave('sprint_id', val === '_backlog' ? null : val)}
+                value={form.sprint_id || '_none'}
+                onValueChange={(val) => handleFieldSave('sprint_id', val === '_none' ? null : val)}
               >
                 <SelectTrigger className="border-0 bg-transparent h-7 px-1 text-sm hover:bg-accent w-auto">
-                  <SelectValue placeholder="Backlog" />
+                  <SelectValue placeholder="Sin asignar" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="_backlog">Backlog</SelectItem>
+                  <SelectItem value="_none">Sin asignar</SelectItem>
                   {state.sprints.map(s => (
                     <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                   ))}

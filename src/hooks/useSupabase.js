@@ -369,6 +369,85 @@ export function useSupabase() {
     return { data, error }
   }, [])
 
+  // --- Board Statuses ---
+
+  const DEFAULT_STATUSES = [
+    { name: 'Backlog', color: '#6b7280', position: 0 },
+    { name: 'Por hacer', color: '#9ca3af', position: 1 },
+    { name: 'En progreso', color: '#3b82f6', position: 2 },
+    { name: 'En revisión', color: '#eab308', position: 3 },
+    { name: 'Completado', color: '#22c55e', position: 4 },
+    { name: 'Bloqueado', color: '#ef4444', position: 5 },
+  ]
+
+  const fetchBoardStatuses = useCallback(async (boardId) => {
+    const { data, error } = await supabase
+      .from('board_statuses')
+      .select('*')
+      .eq('board_id', boardId)
+      .order('position', { ascending: true })
+    if (!error && data) {
+      dispatch({ type: 'SET_BOARD_STATUSES', payload: data })
+    }
+    return { data, error }
+  }, [dispatch])
+
+  const initDefaultStatuses = useCallback(async (boardId) => {
+    // Check if board already has statuses
+    const { data: existing } = await supabase
+      .from('board_statuses')
+      .select('id')
+      .eq('board_id', boardId)
+      .limit(1)
+    if (existing && existing.length > 0) return // Already has statuses
+
+    const statuses = DEFAULT_STATUSES.map(s => ({ ...s, board_id: boardId }))
+    const { data, error } = await supabase
+      .from('board_statuses')
+      .insert(statuses)
+      .select()
+    if (!error && data) {
+      dispatch({ type: 'SET_BOARD_STATUSES', payload: data })
+    }
+    return { data, error }
+  }, [dispatch])
+
+  const createBoardStatus = useCallback(async (boardId, name, color, position) => {
+    const { data, error } = await supabase
+      .from('board_statuses')
+      .insert({ board_id: boardId, name, color, position })
+      .select()
+      .single()
+    if (!error && data) {
+      dispatch({ type: 'ADD_BOARD_STATUS', payload: data })
+    }
+    return { data, error }
+  }, [dispatch])
+
+  const updateBoardStatus = useCallback(async (id, updates) => {
+    const { data, error } = await supabase
+      .from('board_statuses')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+    if (!error && data) {
+      dispatch({ type: 'UPDATE_BOARD_STATUS', payload: data })
+    }
+    return { data, error }
+  }, [dispatch])
+
+  const deleteBoardStatus = useCallback(async (id) => {
+    const { error } = await supabase
+      .from('board_statuses')
+      .delete()
+      .eq('id', id)
+    if (!error) {
+      dispatch({ type: 'DELETE_BOARD_STATUS', payload: id })
+    }
+    return { error }
+  }, [dispatch])
+
   return {
     fetchOrganizations,
     createOrganization,
@@ -398,5 +477,10 @@ export function useSupabase() {
     acceptInvite,
     declineInvite,
     fetchMyInvites,
+    fetchBoardStatuses,
+    createBoardStatus,
+    updateBoardStatus,
+    deleteBoardStatus,
+    initDefaultStatuses,
   }
 }

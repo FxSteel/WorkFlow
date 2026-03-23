@@ -14,6 +14,7 @@ const initialState = {
   tasks: [],
   members: [], // deprecated alias — reads from orgMembers
   invites: [],
+  boardStatuses: [],
   selectedTask: null,
   sidePanelTask: null,
   isTaskModalOpen: false,
@@ -82,6 +83,16 @@ function appReducer(state, action) {
       return { ...state, members: action.payload, orgMembers: action.payload }
     case 'SET_INVITES':
       return { ...state, invites: action.payload }
+
+    // --- Board Statuses ---
+    case 'SET_BOARD_STATUSES':
+      return { ...state, boardStatuses: action.payload }
+    case 'ADD_BOARD_STATUS':
+      return { ...state, boardStatuses: [...state.boardStatuses, action.payload] }
+    case 'UPDATE_BOARD_STATUS':
+      return { ...state, boardStatuses: state.boardStatuses.map(s => s.id === action.payload.id ? { ...s, ...action.payload } : s) }
+    case 'DELETE_BOARD_STATUS':
+      return { ...state, boardStatuses: state.boardStatuses.filter(s => s.id !== action.payload) }
     case 'UPDATE_TASK': {
       const tasks = state.tasks.map(t =>
         t.id === action.payload.id ? { ...t, ...action.payload } : t

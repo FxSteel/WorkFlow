@@ -130,14 +130,15 @@ export default function TaskModal() {
               </label>
               <Select value={form.status} onValueChange={(val) => handleChange('status', val)}>
                 <SelectTrigger>
-                  <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium text-white', STATUS_COLORS[form.status])}>
-                    {form.status}
-                  </span>
+                  {(() => {
+                    const s = (state.boardStatuses || []).find(bs => bs.name === form.status)
+                    return <span className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white" style={{ backgroundColor: s?.color || '#9ca3af' }}>{form.status}</span>
+                  })()}
                 </SelectTrigger>
                 <SelectContent>
-                  {STATUS_OPTIONS.map(s => (
-                    <SelectItem key={s} value={s}>
-                      <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium text-white', STATUS_COLORS[s])}>{s}</span>
+                  {(state.boardStatuses || []).map(s => (
+                    <SelectItem key={s.id} value={s.name}>
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white" style={{ backgroundColor: s.color }}>{s.name}</span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -202,14 +203,14 @@ export default function TaskModal() {
                 Sprint
               </label>
               <Select
-                value={form.sprint_id || '_backlog'}
-                onValueChange={(val) => handleChange('sprint_id', val === '_backlog' ? null : val)}
+                value={form.sprint_id || '_none'}
+                onValueChange={(val) => handleChange('sprint_id', val === '_none' ? null : val)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Backlog" />
+                  <SelectValue placeholder="Sin asignar" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="_backlog">Backlog</SelectItem>
+                  <SelectItem value="_none">Sin asignar</SelectItem>
                   {state.sprints.map(s => (
                     <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                   ))}

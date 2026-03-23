@@ -23,7 +23,6 @@ export default function TaskSidePanel() {
   const task = state.sidePanelTask
   const isNew = task && !task.id
 
-  const [saved, setSaved] = useState(false)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
 
@@ -50,8 +49,7 @@ export default function TaskSidePanel() {
   const assignee = assignableUsers.find(u => u.id === task.assignee_id)
 
   const showSaved = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 1500)
+    toast.success('Guardado')
   }
 
   const handleFieldUpdate = async (updates) => {
@@ -108,14 +106,7 @@ export default function TaskSidePanel() {
     <div className="fixed top-0 right-0 h-screen w-[60vw] max-w-[800px] min-w-[500px] z-40 flex flex-col bg-card border-l border-border shadow-2xl animate-slide-in-right overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-        <div className="flex items-center gap-2">
-          {saved && (
-            <span className="flex items-center gap-1 text-xs text-success animate-fade-in">
-              <Check className="w-3 h-3" />
-              Guardado
-            </span>
-          )}
-        </div>
+        <div className="flex items-center gap-2" />
         <div className="flex items-center gap-1">
           {!isNew && (
             <button
@@ -195,18 +186,23 @@ export default function TaskSidePanel() {
           {/* Estado */}
           <PropRow icon={Tag} label="Estado">
             <Select
-              value={task.status || 'Por hacer'}
+              value={task.status || (state.boardStatuses?.[0]?.name || 'Por hacer')}
               onValueChange={(val) => handleFieldUpdate({ status: val })}
             >
               <SelectTrigger className="border-0 bg-transparent h-7 px-1 text-sm hover:bg-accent w-auto">
-                <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium text-white', STATUS_COLORS[task.status])}>
-                  {task.status}
-                </span>
+                {(() => {
+                  const s = (state.boardStatuses || []).find(bs => bs.name === task.status)
+                  return (
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white" style={{ backgroundColor: s?.color || '#9ca3af' }}>
+                      {task.status}
+                    </span>
+                  )
+                })()}
               </SelectTrigger>
               <SelectContent>
-                {STATUS_OPTIONS.map(s => (
-                  <SelectItem key={s} value={s}>
-                    <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium text-white', STATUS_COLORS[s])}>{s}</span>
+                {(state.boardStatuses || []).map(s => (
+                  <SelectItem key={s.id} value={s.name}>
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white" style={{ backgroundColor: s.color }}>{s.name}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -249,14 +245,14 @@ export default function TaskSidePanel() {
           {/* Sprint */}
           <PropRow icon={Layers} label="Sprint">
             <Select
-              value={task.sprint_id || '_backlog'}
-              onValueChange={(val) => handleFieldUpdate({ sprint_id: val === '_backlog' ? null : val })}
+              value={task.sprint_id || '_none'}
+              onValueChange={(val) => handleFieldUpdate({ sprint_id: val === '_none' ? null : val })}
             >
               <SelectTrigger className="border-0 bg-transparent h-7 px-1 text-sm hover:bg-accent w-auto">
-                <SelectValue placeholder="Backlog" />
+                <SelectValue placeholder="Sin asignar" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="_backlog">Backlog</SelectItem>
+                <SelectItem value="_none">Sin asignar</SelectItem>
                 {state.sprints.map(s => (
                   <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                 ))}

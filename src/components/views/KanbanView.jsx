@@ -3,16 +3,7 @@ import { Plus } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import { cn } from '../../lib/utils'
-import { STATUS_COLORS, PRIORITY_CONFIG } from '../../lib/constants'
-
-const COLUMNS = [
-  { status: 'Backlog', color: 'bg-gray-500', border: 'border-t-gray-500', dropBg: 'bg-gray-500/10' },
-  { status: 'Por hacer', color: 'bg-gray-400', border: 'border-t-gray-400', dropBg: 'bg-gray-400/10' },
-  { status: 'En progreso', color: 'bg-blue-500', border: 'border-t-blue-500', dropBg: 'bg-blue-500/10' },
-  { status: 'En revisión', color: 'bg-yellow-500', border: 'border-t-yellow-500', dropBg: 'bg-yellow-500/10' },
-  { status: 'Completado', color: 'bg-emerald-500', border: 'border-t-emerald-500', dropBg: 'bg-emerald-500/10' },
-  { status: 'Bloqueado', color: 'bg-red-500', border: 'border-t-red-500', dropBg: 'bg-red-500/10' },
-]
+import { PRIORITY_CONFIG } from '../../lib/constants'
 
 export default function KanbanView() {
   const { state, openTask } = useApp()
@@ -89,27 +80,27 @@ export default function KanbanView() {
   return (
     <div className="flex-1 overflow-x-auto p-4">
       <div className="flex gap-4 min-w-max h-full">
-        {COLUMNS.map(col => {
-          const columnTasks = state.tasks.filter(t => t.status === col.status)
-          const isOver = dragOverCol === col.status && draggedTask?.status !== col.status
+        {(state.boardStatuses || []).map(col => {
+          const columnTasks = state.tasks.filter(t => t.status === col.name)
+          const isOver = dragOverCol === col.name && draggedTask?.status !== col.name
 
           return (
             <div
-              key={col.status}
+              key={col.id}
               className="w-[280px] flex flex-col shrink-0"
-              onDragEnter={(e) => handleColumnDragEnter(e, col.status)}
-              onDragLeave={(e) => handleColumnDragLeave(e, col.status)}
+              onDragEnter={(e) => handleColumnDragEnter(e, col.name)}
+              onDragLeave={(e) => handleColumnDragLeave(e, col.name)}
               onDragOver={handleColumnDragOver}
-              onDrop={(e) => handleDrop(e, col.status)}
+              onDrop={(e) => handleDrop(e, col.name)}
             >
               {/* Column header */}
-              <div className={cn(
-                'rounded-t-lg border-t-[3px] bg-card border border-border px-3 py-2.5 flex items-center justify-between transition-colors',
-                col.border
-              )}>
+              <div
+                className="rounded-t-lg border-t-[3px] bg-card border border-border px-3 py-2.5 flex items-center justify-between transition-colors"
+                style={{ borderTopColor: col.color }}
+              >
                 <div className="flex items-center gap-2">
-                  <div className={cn('w-2.5 h-2.5 rounded-full', col.color)} />
-                  <span className="text-sm font-semibold text-foreground">{col.status}</span>
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: col.color }} />
+                  <span className="text-sm font-semibold text-foreground">{col.name}</span>
                   <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
                     {columnTasks.length}
                   </span>
@@ -155,7 +146,7 @@ export default function KanbanView() {
                         )}
                       </div>
                       {task.assignee_name && (() => {
-                        const member = state.members.find(m => m.id === task.assignee_id)
+                        const member = state.orgMembers.find(m => m.id === task.assignee_id)
                         return (
                           <div className="flex items-center gap-1.5 mt-2">
                             {member?.avatar_url ? (
@@ -184,14 +175,14 @@ export default function KanbanView() {
                 )}
 
                 {/* Quick add */}
-                {addingTo === col.status ? (
+                {addingTo === col.name ? (
                   <div className="bg-card border border-border rounded-lg p-2">
                     <input
                       autoFocus
                       value={newTitle}
                       onChange={(e) => setNewTitle(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleQuickAdd(col.status)
+                        if (e.key === 'Enter') handleQuickAdd(col.name)
                         if (e.key === 'Escape') { setAddingTo(null); setNewTitle('') }
                       }}
                       onBlur={() => { if (!newTitle.trim()) { setAddingTo(null); setNewTitle('') } }}
@@ -201,7 +192,7 @@ export default function KanbanView() {
                   </div>
                 ) : (
                   <button
-                    onClick={() => setAddingTo(col.status)}
+                    onClick={() => setAddingTo(col.name)}
                     className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded-lg transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Sun, Moon, Filter, SortAsc, Plus, LogOut, User, Settings, ChevronRight, Clock } from 'lucide-react'
+import { Sun, Moon, Plus, LogOut, User, Settings, ChevronRight, Clock, Home, ChevronRightIcon } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
 import { useApp } from '../../context/AppContext'
@@ -27,7 +27,7 @@ const STATUS_DESCRIPTIONS = {
 export default function Topbar({ onNewTask, onNewSprint, onOpenSettings, onOpenProfile }) {
   const { theme, toggleTheme } = useTheme()
   const { user, signOut } = useAuth()
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showStatusPicker, setShowStatusPicker] = useState(false)
   const [durationSubmenu, setDurationSubmenu] = useState(null) // status key
@@ -102,29 +102,43 @@ export default function Topbar({ onNewTask, onNewSprint, onOpenSettings, onOpenP
 
   return (
     <header className="h-14 border-b border-border bg-card flex items-center justify-between px-4 shrink-0">
-      <div className="flex items-center gap-3">
-        {state.currentBoard ? (
-          <div className="flex items-center gap-3">
-            <h1 className="text-lg font-semibold text-foreground">
-              {state.currentBoard.name}
-            </h1>
-            <div className="flex items-center gap-1">
-              <button className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-secondary text-secondary-foreground hover:bg-accent transition-colors">
-                <Filter className="w-3.5 h-3.5" />
-                Filtrar
-              </button>
-              <button className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-secondary text-secondary-foreground hover:bg-accent transition-colors">
-                <SortAsc className="w-3.5 h-3.5" />
-                Ordenar
-              </button>
-            </div>
-          </div>
-        ) : (
-          <h1 className="text-lg font-semibold text-foreground">
-            {state.currentWorkspace ? state.currentWorkspace.name : ''}
-          </h1>
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-1 text-sm min-w-0">
+        <button
+          onClick={() => {
+            dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: null })
+            dispatch({ type: 'SET_CURRENT_BOARD', payload: null })
+          }}
+          className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+        >
+          <Home className="w-3.5 h-3.5" />
+          <span>Inicio</span>
+        </button>
+
+        {state.currentWorkspace && (
+          <>
+            <ChevronRightIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <button
+              onClick={() => dispatch({ type: 'SET_CURRENT_BOARD', payload: null })}
+              className={cn(
+                'truncate max-w-[150px] transition-colors',
+                state.currentBoard ? 'text-muted-foreground hover:text-foreground' : 'text-foreground font-medium'
+              )}
+            >
+              {state.currentWorkspace.name}
+            </button>
+          </>
         )}
-      </div>
+
+        {state.currentBoard && (
+          <>
+            <ChevronRightIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className="text-foreground font-medium truncate max-w-[200px]">
+              {state.currentBoard.name}
+            </span>
+          </>
+        )}
+      </nav>
 
       <div className="flex items-center gap-2">
         {state.currentBoard && (

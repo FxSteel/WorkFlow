@@ -44,7 +44,7 @@ export default function FichasView() {
               {/* Footer */}
               <div className="flex items-center justify-between pt-2 border-t border-border">
                 {task.assignee_name ? (() => {
-                  const member = state.members.find(m => m.id === task.assignee_id)
+                  const member = state.orgMembers.find(m => m.id === task.assignee_id)
                   return (
                     <div className="flex items-center gap-1.5">
                       {member?.avatar_url ? (

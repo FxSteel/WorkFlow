@@ -14,14 +14,16 @@ import CronogramaView from '../views/CronogramaView'
 import { cn } from '../../lib/utils'
 import BoardSkeleton from '../skeleton/BoardSkeleton'
 import { toast } from 'sonner'
+import StatusConfigModal from './StatusConfigModal'
 
 export default function BoardView() {
   const { state, openTaskModal } = useApp()
-  const { fetchTasks, fetchSprints, fetchMembers, createTask } = useSupabase()
+  const { fetchTasks, fetchSprints, fetchMembers, createTask, fetchBoardStatuses, initDefaultStatuses } = useSupabase()
   const [collapsedSprints, setCollapsedSprints] = useState({})
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [addingToSprint, setAddingToSprint] = useState(null)
   const [boardLoading, setBoardLoading] = useState(false)
+  const [showStatusConfig, setShowStatusConfig] = useState(false)
 
   // Views state per board (persisted in localStorage)
   const [activeViews, setActiveViews] = useState(['tabla'])
@@ -83,6 +85,7 @@ export default function BoardView() {
       Promise.all([
         fetchTasks(state.currentBoard.id),
         fetchSprints(state.currentBoard.id),
+        initDefaultStatuses(state.currentBoard.id).then(() => fetchBoardStatuses(state.currentBoard.id)),
       ]).finally(() => setBoardLoading(false))
     }
     if (state.currentWorkspace) {
@@ -101,7 +104,7 @@ export default function BoardView() {
       title: newTaskTitle.trim(),
       board_id: state.currentBoard.id,
       sprint_id: sprintId,
-      status: 'Por hacer',
+      status: state.boardStatuses?.[1]?.name || state.boardStatuses?.[0]?.name || 'Por hacer',
       priority: 'medium',
       position: taskCount,
     })
@@ -126,6 +129,7 @@ export default function BoardView() {
         onChangeView={handleChangeView}
         onAddView={handleAddView}
         onRemoveView={handleRemoveView}
+        onOpenStatusConfig={() => setShowStatusConfig(true)}
       />
 
       {/* Active View */}
@@ -146,6 +150,8 @@ export default function BoardView() {
       {activeView === 'gantt' && <GanttView />}
       {activeView === 'fichas' && <FichasView />}
       {activeView === 'cronograma' && <CronogramaView />}
+
+      <StatusConfigModal open={showStatusConfig} onClose={() => setShowStatusConfig(false)} />
     </div>
   )
 }
@@ -220,7 +226,7 @@ function TableView({
     await updateSprint(sprintId, { [field]: value || null })
   }
 
-  const backlogTasks = state.tasks.filter(t => t.status === 'Backlog' || !t.sprint_id)
+  const unassignedTasks = state.tasks.filter(t => !t.sprint_id)
 
   return (
     <div className="flex-1 overflow-auto p-4">
@@ -411,12 +417,12 @@ function TableView({
         )
       })}
 
-      {/* Backlog — always visible when there are backlog tasks OR no sprints */}
-      {(backlogTasks.length > 0 || state.sprints.length === 0) && (
+      {/* Tasks without sprint */}
+      {unassignedTasks.length > 0 && (
         <div
           className={cn(
             'mb-6 animate-fade-in rounded-lg transition-all',
-            dragOverSprint === '_backlog' && draggedTask?.sprint_id !== null && 'ring-2 ring-primary/30 bg-primary/5'
+            dragOverSprint === '_nosprint' && draggedTask?.sprint_id !== null && 'ring-2 ring-primary/30 bg-primary/5'
           )}
           onDragOver={(e) => e.preventDefault()}
           onDragEnter={() => handleSprintDragEnter(null)}
@@ -425,21 +431,21 @@ function TableView({
         >
           <div className="flex items-center gap-2 mb-2">
             <button
-              onClick={() => toggleSprint('_backlog')}
+              onClick={() => toggleSprint('_nosprint')}
               className="p-0.5 rounded hover:bg-accent transition-colors"
             >
-              {collapsedSprints._backlog
+              {collapsedSprints._nosprint
                 ? <ChevronRight className="w-4 h-4 text-muted-foreground" />
                 : <ChevronDown className="w-4 h-4 text-muted-foreground" />
               }
             </button>
             <div className="w-3 h-3 rounded-full bg-muted-foreground" />
-            <h3 className="font-semibold text-sm text-foreground">Backlog</h3>
+            <h3 className="font-semibold text-sm text-foreground">Sin sprint</h3>
             <span className="text-xs text-muted-foreground">
-              {backlogTasks.length} tareas
+              {unassignedTasks.length} tareas
             </span>
           </div>
-          {!collapsedSprints._backlog && (
+          {!collapsedSprints._nosprint && (
           <div className="rounded-lg border border-border overflow-hidden bg-card">
             <div className="grid grid-cols-[minmax(250px,2fr)_120px_110px_110px_100px_100px_70px] gap-0 bg-muted/50 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider">
               <div className="px-3 py-2">Tarea</div>
@@ -450,7 +456,7 @@ function TableView({
               <div className="px-3 py-2 text-center">Sprint</div>
               <div className="px-3 py-2 text-center"></div>
             </div>
-            {backlogTasks.map(task => (
+            {unassignedTasks.map(task => (
               <TaskRow
                 key={task.id}
                 task={task}
@@ -459,8 +465,7 @@ function TableView({
                 isDragging={draggedTask?.id === task.id}
               />
             ))}
-            {/* Quick add to backlog */}
-            {addingToSprint === '_backlog' ? (
+            {addingToSprint === '_nosprint' ? (
               <div className="px-3 py-2 border-t border-border">
                 <input
                   autoFocus
@@ -477,7 +482,7 @@ function TableView({
               </div>
             ) : (
               <button
-                onClick={() => setAddingToSprint('_backlog')}
+                onClick={() => setAddingToSprint('_nosprint')}
                 className="w-full px-3 py-2 flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors border-t border-border"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -506,7 +511,7 @@ function TableView({
             <p className="text-sm text-muted-foreground mb-1">
               Se eliminará el sprint{' '}
               <span className="font-semibold text-foreground">"{deleteSprintConfirm.name}"</span>.
-              Las tareas asociadas se moverán al Backlog.
+              Las tareas asociadas quedarán sin sprint asignado.
             </p>
             <div className="flex items-center justify-end gap-2 mt-5">
               <button

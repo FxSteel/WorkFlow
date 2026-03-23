@@ -68,21 +68,25 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
 
   const handleSprintChange = async (sprintId) => {
     await updateTask(task.id, { sprint_id: sprintId })
+    toast.success('Sprint actualizado')
     sprint.setOpen(false)
   }
 
   const handleStatusChange = async (s) => {
     await updateTask(task.id, { status: s })
+    toast.success('Estado actualizado')
     status.setOpen(false)
   }
 
   const handlePriorityChange = async (p) => {
     await updateTask(task.id, { priority: p })
+    toast.success('Prioridad actualizada')
     priority.setOpen(false)
   }
 
   const handleAssigneeChange = async (memberId, memberName) => {
     await updateTask(task.id, { assignee_id: memberId, assignee_name: memberName })
+    toast.success(memberId ? `Asignado a ${memberName}` : 'Responsable removido')
     if (memberId) {
       const member = state.orgMembers.find(m => m.id === memberId)
       notifyTaskAssigned({ task, assigneeMember: member, fromUser: user, workspaceId: state.currentWorkspace?.id })
@@ -108,10 +112,17 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
     actions.setOpen(false)
   }
 
-  const handleDelete = async () => {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  const handleDelete = () => {
+    setShowDeleteConfirm(true)
+    actions.setOpen(false)
+  }
+
+  const confirmDelete = async () => {
     await deleteTask(task.id)
     toast.success('Tarea eliminada')
-    actions.setOpen(false)
+    setShowDeleteConfirm(false)
   }
 
   const priorityConfig = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium
@@ -213,16 +224,20 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
 
       {/* Status */}
       <div className="px-3 py-2.5 flex items-center justify-center">
-        <button
-          ref={status.triggerRef}
-          onClick={() => { status.updatePos('left', 144); status.setOpen(!status.open) }}
-          className={cn(
-            'px-2 py-0.5 rounded-full text-[11px] font-medium text-white whitespace-nowrap transition-opacity hover:opacity-80',
-            STATUS_COLORS[task.status] || 'bg-gray-400'
-          )}
-        >
-          {task.status}
-        </button>
+        {(() => {
+          const statusObj = (state.boardStatuses || []).find(s => s.name === task.status)
+          const statusColor = statusObj?.color || '#9ca3af'
+          return (
+            <button
+              ref={status.triggerRef}
+              onClick={() => { status.updatePos('left', 144); status.setOpen(!status.open) }}
+              className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white whitespace-nowrap transition-opacity hover:opacity-80"
+              style={{ backgroundColor: statusColor }}
+            >
+              {task.status}
+            </button>
+          )
+        })()}
 
         {status.open && createPortal(
           <div
@@ -230,14 +245,14 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
             className="fixed z-[200] w-40 rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in"
             style={{ top: status.pos.top, left: status.pos.left }}
           >
-            {STATUS_OPTIONS.map(s => (
+            {(state.boardStatuses || []).map(s => (
               <button
-                key={s}
-                onClick={() => handleStatusChange(s)}
+                key={s.id}
+                onClick={() => handleStatusChange(s.name)}
                 className="w-full px-2 py-1 text-left hover:bg-accent transition-colors flex items-center"
               >
-                <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium text-white w-full text-center', STATUS_COLORS[s])}>
-                  {s}
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white w-full text-center" style={{ backgroundColor: s.color }}>
+                  {s.name}
                 </span>
               </button>
             ))}
@@ -304,7 +319,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
             className="w-2 h-2 rounded-full shrink-0"
             style={{ backgroundColor: sprintObj?.color || '#9ca3af' }}
           />
-          {sprintName || 'Backlog'}
+          {sprintName || 'Sin sprint'}
         </button>
 
         {sprint.open && createPortal(
@@ -318,7 +333,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
               className={cn('w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2', !task.sprint_id && 'bg-accent/50')}
             >
               <div className="w-2 h-2 rounded-full bg-gray-400" />
-              Backlog
+              Sin asignar
             </button>
             {state.sprints.map(s => (
               <button
@@ -377,6 +392,33 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
           document.body
         )}
       </div>
+
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && createPortal(
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="bg-popover border border-border rounded-xl p-6 w-[360px] shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-foreground mb-2">¿Eliminar tarea?</h3>
+            <p className="text-sm text-muted-foreground mb-5">
+              Esta acción no se puede deshacer. La tarea <strong className="text-foreground">"{task.title}"</strong> será eliminada permanentemente.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-accent transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-4 py-2 text-sm rounded-lg bg-destructive text-white hover:bg-destructive/90 transition-colors"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
