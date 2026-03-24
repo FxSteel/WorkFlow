@@ -247,8 +247,8 @@ export default function AdminPanel() {
         </div>
 
         {/* Table */}
-        <div className="rounded-xl border border-border overflow-hidden bg-card">
-          <div className="overflow-x-auto">
+        <div className="rounded-xl border border-border bg-card">
+          <div className="overflow-x-auto overflow-y-visible">
             <table className="w-full">
               <thead>
                 <tr className="bg-muted/50 border-b border-border">

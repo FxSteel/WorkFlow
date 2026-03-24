@@ -60,7 +60,32 @@ export function useSupabase() {
           .insert({ name: 'Tareas', workspace_id: wsData.id })
           .select()
           .single()
-        if (boardData) dispatch({ type: 'ADD_BOARD', payload: boardData })
+        if (boardData) {
+          dispatch({ type: 'ADD_BOARD', payload: boardData })
+          // Init default statuses
+          const defaultStatuses = [
+            { name: 'Backlog', color: '#6b7280', position: 0, board_id: boardData.id },
+            { name: 'Por hacer', color: '#9ca3af', position: 1, board_id: boardData.id },
+            { name: 'En progreso', color: '#3b82f6', position: 2, board_id: boardData.id },
+            { name: 'En revisión', color: '#eab308', position: 3, board_id: boardData.id },
+            { name: 'Completado', color: '#22c55e', position: 4, board_id: boardData.id },
+            { name: 'Bloqueado', color: '#ef4444', position: 5, board_id: boardData.id },
+          ]
+          await supabase.from('board_statuses').insert(defaultStatuses)
+        }
+      }
+
+      // Set as current org and fetch members immediately
+      dispatch({ type: 'SET_CURRENT_ORG', payload: data })
+
+      // Fetch org members (the owner we just inserted)
+      const { data: membersData } = await supabase
+        .from('org_members')
+        .select('*')
+        .eq('org_id', data.id)
+        .order('name', { ascending: true })
+      if (membersData) {
+        dispatch({ type: 'SET_ORG_MEMBERS', payload: membersData })
       }
     }
     return { data, error }
@@ -94,6 +119,20 @@ export function useSupabase() {
       .select('*')
       .eq('org_id', orgId)
       .order('name', { ascending: true })
+    if (error) {
+      console.error('fetchOrgMembers error:', error.message, error.code)
+      // Retry once after a short delay (RLS might need time after org creation)
+      await new Promise(r => setTimeout(r, 1000))
+      const { data: retryData, error: retryError } = await supabase
+        .from('org_members')
+        .select('*')
+        .eq('org_id', orgId)
+        .order('name', { ascending: true })
+      if (!retryError && retryData) {
+        dispatch({ type: 'SET_ORG_MEMBERS', payload: retryData })
+        return { data: retryData, error: null }
+      }
+    }
     if (!error && data) {
       dispatch({ type: 'SET_ORG_MEMBERS', payload: data })
     }
@@ -210,7 +249,19 @@ export function useSupabase() {
       .insert(board)
       .select()
       .single()
-    if (!error && data) dispatch({ type: 'ADD_BOARD', payload: data })
+    if (!error && data) {
+      dispatch({ type: 'ADD_BOARD', payload: data })
+      // Init default statuses for the new board
+      const statuses = [
+        { name: 'Backlog', color: '#6b7280', position: 0, board_id: data.id },
+        { name: 'Por hacer', color: '#9ca3af', position: 1, board_id: data.id },
+        { name: 'En progreso', color: '#3b82f6', position: 2, board_id: data.id },
+        { name: 'En revisión', color: '#eab308', position: 3, board_id: data.id },
+        { name: 'Completado', color: '#22c55e', position: 4, board_id: data.id },
+        { name: 'Bloqueado', color: '#ef4444', position: 5, board_id: data.id },
+      ]
+      await supabase.from('board_statuses').insert(statuses)
+    }
     return { data, error }
   }, [dispatch])
 
@@ -274,6 +325,9 @@ export function useSupabase() {
       .insert(task)
       .select()
       .single()
+    if (error) {
+      console.error('createTask error:', error.message, error.code, task)
+    }
     if (!error && data) dispatch({ type: 'ADD_TASK', payload: data })
     return { data, error }
   }, [dispatch])
@@ -285,6 +339,9 @@ export function useSupabase() {
       .eq('id', id)
       .select()
       .single()
+    if (error) {
+      console.error('updateTask error:', error.message, error.code, { id, updates })
+    }
     if (!error && data) dispatch({ type: 'UPDATE_TASK', payload: data })
     return { data, error }
   }, [dispatch])
@@ -329,8 +386,8 @@ export function useSupabase() {
     return { error }
   }, [dispatch])
 
-  const acceptInvite = useCallback(async (inviteId, orgId, userId, userName, userEmail) => {
-    // Add user as org_member
+  const acceptInvite = useCallback(async (inviteId, orgId, userId, userName, userEmail, inviteRole, workspaceIds) => {
+    // Add user as org_member with role and workspace access from invite
     const { error: memberError } = await supabase
       .from('org_members')
       .insert({
@@ -338,7 +395,8 @@ export function useSupabase() {
         user_id: userId,
         name: userName,
         email: userEmail,
-        role: 'member',
+        role: inviteRole || 'member',
+        workspace_ids: workspaceIds || [],
         color: ['#6c5ce7', '#00b894', '#0984e3', '#e17055', '#fdcb6e'][Math.floor(Math.random() * 5)],
       })
     if (memberError) return { error: memberError }

@@ -88,10 +88,10 @@ export default function BoardView() {
         initDefaultStatuses(state.currentBoard.id).then(() => fetchBoardStatuses(state.currentBoard.id)),
       ]).finally(() => setBoardLoading(false))
     }
-    if (state.currentWorkspace) {
-      fetchMembers(state.currentWorkspace.id)
+    if (state.currentOrg) {
+      fetchMembers(state.currentOrg.id)
     }
-  }, [state.currentBoard, state.currentWorkspace])
+  }, [state.currentBoard, state.currentOrg])
 
   const toggleSprint = (id) => {
     setCollapsedSprints(prev => ({ ...prev, [id]: !prev[id] }))

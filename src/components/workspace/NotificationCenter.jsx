@@ -74,7 +74,7 @@ export default function NotificationCenter() {
   const handleAcceptInvite = async (invite) => {
     setLoadingId(invite.id)
     const userName = user.user_metadata?.full_name || user.email.split('@')[0]
-    await acceptInvite(invite.id, invite.org_id, user.id, userName, user.email)
+    await acceptInvite(invite.id, invite.org_id, user.id, userName, user.email, invite.role, invite.workspace_ids)
     setInvites(prev => prev.filter(i => i.id !== invite.id))
     await fetchOrganizations()
     setLoadingId(null)

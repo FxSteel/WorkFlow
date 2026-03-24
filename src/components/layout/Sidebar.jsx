@@ -65,6 +65,16 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
   const currentOrgMember = state.orgMembers.find(m => m.user_id === user?.id)
   const canManageWorkspaces = currentOrgMember?.role === 'owner' || currentOrgMember?.role === 'admin'
 
+  // Filter workspaces based on member access
+  const visibleWorkspaces = canManageWorkspaces
+    ? state.workspaces
+    : state.workspaces.filter(ws => {
+        const memberWsIds = currentOrgMember?.workspace_ids || []
+        // If no workspace_ids set, member has no access (must be explicitly granted)
+        if (memberWsIds.length === 0) return false
+        return memberWsIds.includes(ws.id)
+      })
+
   // Track when workspaces fetch completes (loading: false->true->false)
   useEffect(() => {
     if (state.loading) {
@@ -437,7 +447,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
           </div>
         )}
 
-        {state.workspaces.map(workspace => (
+        {visibleWorkspaces.map(workspace => (
           <div key={workspace.id} className="mb-1">
             {/* Workspace row */}
             <div

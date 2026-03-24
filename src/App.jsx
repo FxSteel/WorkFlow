@@ -3,6 +3,7 @@ import { ThemeProvider } from './context/ThemeContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { AppProvider, useApp } from './context/AppContext'
 import { useSupabase } from './hooks/useSupabase'
+import { supabase } from './lib/supabase'
 import Sidebar from './components/layout/Sidebar'
 import Topbar from './components/layout/Topbar'
 import BoardView from './components/board/BoardView'
@@ -16,6 +17,7 @@ import SettingsModal from './components/settings/SettingsModal'
 import ProfileModal from './components/settings/ProfileModal'
 import AuthPage from './components/auth/AuthPage'
 import SetupPassword from './components/auth/SetupPassword'
+import CreateOrgScreen from './components/onboarding/CreateOrgScreen'
 import { Loader2 } from 'lucide-react'
 import { Toaster } from 'sonner'
 import { usePresence } from './hooks/usePresence'
@@ -37,10 +39,11 @@ function AppContent() {
   const [showSettings, setShowSettings] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
   const [inviteModal, setInviteModal] = useState({ open: false, workspace: null })
+  const [orgsLoaded, setOrgsLoaded] = useState(false)
 
   // Fetch organizations on load
   useEffect(() => {
-    fetchOrganizations()
+    fetchOrganizations().then(() => setOrgsLoaded(true))
   }, [])
 
   // Auto-select first org if none selected
@@ -113,6 +116,24 @@ function AppContent() {
   const pref = getTaskEditorPref()
   const showFullPage = pref === 'fullpage' && (state.isTaskModalOpen || state.isSidePanelOpen)
 
+  // Show onboarding only if user has no organizations AND no pending invites
+  const [hasPendingInvites, setHasPendingInvites] = useState(false)
+  useEffect(() => {
+    if (orgsLoaded && state.organizations.length === 0 && user?.email) {
+      supabase
+        .from('org_invites')
+        .select('id')
+        .eq('email', user.email)
+        .eq('status', 'pending')
+        .limit(1)
+        .then(({ data }) => setHasPendingInvites(data && data.length > 0))
+    }
+  }, [orgsLoaded, state.organizations.length, user?.email])
+
+  if (orgsLoaded && state.organizations.length === 0 && !hasPendingInvites) {
+    return <CreateOrgScreen />
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar
@@ -137,7 +158,6 @@ function AppContent() {
       <SprintModal isOpen={showSprintModal} onClose={() => setShowSprintModal(false)} />
       <InviteModal
         isOpen={inviteModal.open}
-        workspace={inviteModal.workspace}
         onClose={() => setInviteModal({ open: false, workspace: null })}
       />
       <SearchModal isOpen={showSearch} onClose={() => setShowSearch(false)} />

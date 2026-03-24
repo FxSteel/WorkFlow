@@ -8,64 +8,32 @@ export function useSubscription(userId) {
   const checkAccess = useCallback(async () => {
     if (!userId) { setHasAccess(false); return }
 
-    // 1. Check if the user has their own active subscription
-    const { data: ownSub } = await supabase
-      .from('subscriptions')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
+    // Use SECURITY DEFINER function to check access (bypasses RLS issues)
+    const { data, error } = await supabase.rpc('check_user_has_access', { check_user_id: userId })
 
-    if (ownSub) {
-      const now = new Date()
-      const end = ownSub.current_period_end ? new Date(ownSub.current_period_end) : null
-      if (!end || now <= end) {
-        setHasAccess(true)
-        setSubscription(ownSub)
-        return
-      } else {
-        await supabase.from('subscriptions').update({ status: 'expired' }).eq('id', ownSub.id)
-      }
+    if (error) {
+      console.error('checkAccess error:', error.message)
+      setHasAccess(false)
+      setSubscription(null)
+      return
     }
 
-    // 2. Check if user is a member of any organization whose OWNER has an active subscription
-    const { data: memberships } = await supabase
-      .from('org_members')
-      .select('org_id, organizations(owner_id)')
-      .eq('user_id', userId)
+    setHasAccess(!!data)
 
-    if (memberships && memberships.length > 0) {
-      const ownerIds = [...new Set(memberships.map(m => m.organizations?.owner_id).filter(Boolean))]
-
-      for (const ownerId of ownerIds) {
-        if (ownerId === userId) continue // Already checked own sub
-
-        const { data: ownerSub } = await supabase
-          .from('subscriptions')
-          .select('*')
-          .eq('user_id', ownerId)
-          .eq('status', 'active')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single()
-
-        if (ownerSub) {
-          const now = new Date()
-          const end = ownerSub.current_period_end ? new Date(ownerSub.current_period_end) : null
-          if (!end || now <= end) {
-            setHasAccess(true)
-            setSubscription(ownerSub)
-            return
-          }
-        }
-      }
+    // If has access, fetch own subscription for display purposes
+    if (data) {
+      const { data: ownSub } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+      setSubscription(ownSub || { status: 'active', plan: 'pro' })
+    } else {
+      setSubscription(null)
     }
-
-    // No access
-    setHasAccess(false)
-    setSubscription(null)
   }, [userId])
 
   useEffect(() => {

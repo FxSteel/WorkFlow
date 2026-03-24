@@ -31,23 +31,52 @@ export default function HomePage() {
   const greeting = getGreeting()
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuario'
 
-  // Fetch recent boards across all workspaces
+  // Get current member's workspace access
+  const currentMember = state.orgMembers.find(m => m.user_id === user?.id)
+  const isAdminOrOwner = currentMember?.role === 'owner' || currentMember?.role === 'admin'
+  const accessibleWsIds = isAdminOrOwner
+    ? state.workspaces.map(w => w.id)
+    : (currentMember?.workspace_ids || [])
+
+  // Fetch recent boards filtered by current org workspaces
   useEffect(() => {
     async function fetchBoards() {
+      if (accessibleWsIds.length === 0) { setRecentBoards([]); return }
       const { data } = await supabase
         .from('boards')
         .select('*, workspaces(name, color)')
+        .in('workspace_id', accessibleWsIds)
         .order('created_at', { ascending: false })
         .limit(15)
       if (data) setRecentBoards(data)
     }
     fetchBoards()
-  }, [])
+  }, [accessibleWsIds.join(',')])
 
-  // Fetch upcoming tasks across all workspaces
+  // Fetch upcoming and overdue tasks filtered by accessible workspaces
   useEffect(() => {
     async function fetchTasks() {
       setLoadingTasks(true)
+      if (accessibleWsIds.length === 0) {
+        setUpcomingTasks([])
+        setOverdueTasks([])
+        setLoadingTasks(false)
+        return
+      }
+
+      // Get board IDs from accessible workspaces
+      const { data: boards } = await supabase
+        .from('boards')
+        .select('id')
+        .in('workspace_id', accessibleWsIds)
+      const boardIds = (boards || []).map(b => b.id)
+      if (boardIds.length === 0) {
+        setUpcomingTasks([])
+        setOverdueTasks([])
+        setLoadingTasks(false)
+        return
+      }
+
       const now = new Date()
       const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
@@ -55,6 +84,7 @@ export default function HomePage() {
       const { data: upcoming } = await supabase
         .from('tasks')
         .select('*, boards(name, workspace_id, workspaces(name, color))')
+        .in('board_id', boardIds)
         .gte('due_date', today)
         .neq('status', 'Completado')
         .order('due_date', { ascending: true })
@@ -64,6 +94,7 @@ export default function HomePage() {
       const { data: overdue } = await supabase
         .from('tasks')
         .select('*, boards(name, workspace_id, workspaces(name, color))')
+        .in('board_id', boardIds)
         .lt('due_date', today)
         .neq('status', 'Completado')
         .order('due_date', { ascending: true })
@@ -74,7 +105,7 @@ export default function HomePage() {
       setLoadingTasks(false)
     }
     fetchTasks()
-  }, [])
+  }, [accessibleWsIds.join(',')])
 
   const scrollCarousel = (direction) => {
     if (!carouselRef.current) return
