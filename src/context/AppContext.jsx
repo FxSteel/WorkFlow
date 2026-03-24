@@ -15,6 +15,8 @@ const initialState = {
   members: [], // deprecated alias — reads from orgMembers
   invites: [],
   boardStatuses: [],
+  customFields: [],
+  customFieldValues: {},
   selectedTask: null,
   sidePanelTask: null,
   isTaskModalOpen: false,
@@ -101,6 +103,36 @@ function appReducer(state, action) {
       return { ...state, boardStatuses: state.boardStatuses.map(s => s.id === action.payload.id ? { ...s, ...action.payload } : s) }
     case 'DELETE_BOARD_STATUS':
       return { ...state, boardStatuses: state.boardStatuses.filter(s => s.id !== action.payload) }
+
+    // --- Custom Fields ---
+    case 'SET_CUSTOM_FIELDS':
+      return { ...state, customFields: action.payload }
+    case 'ADD_CUSTOM_FIELD':
+      return { ...state, customFields: [...state.customFields, action.payload] }
+    case 'UPDATE_CUSTOM_FIELD':
+      return { ...state, customFields: state.customFields.map(f => f.id === action.payload.id ? { ...f, ...action.payload } : f) }
+    case 'DELETE_CUSTOM_FIELD':
+      return { ...state, customFields: state.customFields.filter(f => f.id !== action.payload) }
+    case 'SET_CUSTOM_FIELD_VALUES':
+      return { ...state, customFieldValues: action.payload }
+    case 'SET_TASK_CUSTOM_VALUES': {
+      const { taskId, values } = action.payload
+      return { ...state, customFieldValues: { ...state.customFieldValues, [taskId]: values } }
+    }
+    case 'UPSERT_CUSTOM_FIELD_VALUE': {
+      const { taskId, fieldId, valueCol, value } = action.payload
+      const existing = (state.customFieldValues[taskId] || [])
+      const idx = existing.findIndex(v => v.custom_field_id === fieldId)
+      let updated
+      if (idx >= 0) {
+        updated = [...existing]
+        updated[idx] = { ...updated[idx], [valueCol]: value }
+      } else {
+        updated = [...existing, { task_id: taskId, custom_field_id: fieldId, [valueCol]: value }]
+      }
+      return { ...state, customFieldValues: { ...state.customFieldValues, [taskId]: updated } }
+    }
+
     case 'UPDATE_TASK': {
       const tasks = state.tasks.map(t =>
         t.id === action.payload.id ? { ...t, ...action.payload } : t

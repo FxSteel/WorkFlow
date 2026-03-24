@@ -42,10 +42,10 @@ function usePortalDropdown() {
   return { open, setOpen, pos, updatePos, triggerRef, dropdownRef }
 }
 
-export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
+export default function TaskRow({ task, onDragStart, onDragEnd, isDragging, gridTemplate, customFields = [] }) {
   const { state, openTask } = useApp()
   const { user } = useAuth()
-  const { updateTask, deleteTask, createTask } = useSupabase()
+  const { updateTask, deleteTask, createTask, setCustomFieldValue } = useSupabase()
   const { notifyTaskAssigned } = useNotifications()
   const { can } = usePermissions()
 
@@ -139,9 +139,10 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
       }}
       onDragEnd={() => onDragEnd?.()}
       className={cn(
-        'grid grid-cols-[minmax(250px,2fr)_120px_110px_110px_100px_100px_70px] gap-0 border-b border-border last:border-b-0 hover:bg-accent/30 transition-all group text-sm',
+        'grid gap-0 border-b border-border last:border-b-0 hover:bg-accent/30 transition-all group text-sm',
         isDragging && 'opacity-40 scale-[0.98] bg-accent/20'
       )}
+      style={{ gridTemplateColumns: gridTemplate || 'minmax(250px,2fr) 120px 110px 110px 100px 100px 70px' }}
     >
       {/* Task Name */}
       <div className="px-3 py-2.5 flex items-center gap-2 min-w-0">
@@ -352,6 +353,70 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
           document.body
         )}
       </div>
+
+      {/* Custom Fields */}
+      {customFields.map(cf => {
+        const values = state.customFieldValues?.[task.id] || []
+        const cfVal = values.find(v => v.custom_field_id === cf.id)
+
+        if (cf.type === 'dropdown') {
+          const opts = cf.custom_field_options || []
+          const selectedOpt = opts.find(o => o.id === cfVal?.value_option_id)
+          return (
+            <div key={cf.id} className="px-2 py-2.5 flex items-center justify-center">
+              {selectedOpt ? (
+                <button
+                  onClick={async () => {
+                    if (!can('editTask')) return
+                    const currentIdx = opts.findIndex(o => o.id === selectedOpt.id)
+                    const nextIdx = (currentIdx + 1) % (opts.length + 1)
+                    const nextOpt = opts[nextIdx]
+                    await setCustomFieldValue(task.id, cf.id, 'dropdown', nextOpt?.id || null)
+                  }}
+                  className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white cursor-pointer hover:opacity-80 transition-opacity" style={{ backgroundColor: selectedOpt.color }}
+                >
+                  {selectedOpt.label}
+                </button>
+              ) : (
+                <button
+                  onClick={async () => {
+                    if (!can('editTask') || !opts.length) return
+                    await setCustomFieldValue(task.id, cf.id, 'dropdown', opts[0].id)
+                  }}
+                  className="text-[11px] text-muted-foreground/40 hover:text-muted-foreground cursor-pointer"
+                >
+                  —
+                </button>
+              )}
+            </div>
+          )
+        }
+
+        const displayValue = cf.type === 'text' ? (cfVal?.value_text || '')
+          : cf.type === 'number' ? (cfVal?.value_number ?? '')
+          : cf.type === 'date' ? (cfVal?.value_date || '')
+          : cf.type === 'price' ? (cfVal?.value_price ?? '')
+          : ''
+
+        return (
+          <div key={cf.id} className="px-2 py-2.5 flex items-center justify-center">
+            <input
+              type={cf.type === 'number' || cf.type === 'price' ? 'number' : cf.type === 'date' ? 'date' : 'text'}
+              defaultValue={displayValue}
+              onBlur={async (e) => {
+                if (!can('editTask')) return
+                const val = e.target.value
+                await setCustomFieldValue(task.id, cf.id, cf.type, cf.type === 'number' || cf.type === 'price' ? (val ? Number(val) : null) : (val || null))
+                toast.success(`${cf.name} actualizado`)
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur() }}
+              placeholder="—"
+              maxLength={cf.type === 'text' ? 30 : undefined}
+              className="text-[11px] bg-transparent border-0 text-center w-full text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:bg-accent/30 rounded px-1"
+            />
+          </div>
+        )
+      })}
 
       {/* Actions */}
       <div className="px-3 py-2.5 flex items-center justify-center">

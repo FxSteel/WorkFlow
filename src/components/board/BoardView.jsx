@@ -16,17 +16,19 @@ import { cn } from '../../lib/utils'
 import BoardSkeleton from '../skeleton/BoardSkeleton'
 import { toast } from 'sonner'
 import StatusConfigModal from './StatusConfigModal'
+import CustomFieldsConfigModal from './CustomFieldsConfigModal'
 import EmptyState from '../ui/EmptyState'
 
 export default function BoardView() {
   const { state, openTaskModal } = useApp()
-  const { fetchTasks, fetchSprints, fetchMembers, createTask, fetchBoardStatuses, initDefaultStatuses } = useSupabase()
+  const { fetchTasks, fetchSprints, fetchMembers, createTask, fetchBoardStatuses, initDefaultStatuses, fetchCustomFields, fetchCustomFieldValues } = useSupabase()
   const { can } = usePermissions()
   const [collapsedSprints, setCollapsedSprints] = useState({})
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [addingToSprint, setAddingToSprint] = useState(null)
   const [boardLoading, setBoardLoading] = useState(false)
   const [showStatusConfig, setShowStatusConfig] = useState(false)
+  const [showCustomFields, setShowCustomFields] = useState(false)
 
   // Views state per board (persisted in localStorage)
   const [activeViews, setActiveViews] = useState(['tabla'])
@@ -89,6 +91,8 @@ export default function BoardView() {
         fetchTasks(state.currentBoard.id),
         fetchSprints(state.currentBoard.id),
         initDefaultStatuses(state.currentBoard.id).then(() => fetchBoardStatuses(state.currentBoard.id)),
+        fetchCustomFields(state.currentBoard.id),
+        fetchCustomFieldValues(state.currentBoard.id),
       ]).finally(() => setBoardLoading(false))
     }
     if (state.currentOrg) {
@@ -133,6 +137,7 @@ export default function BoardView() {
         onAddView={handleAddView}
         onRemoveView={handleRemoveView}
         onOpenStatusConfig={() => setShowStatusConfig(true)}
+        onOpenCustomFields={() => setShowCustomFields(true)}
       />
 
       {/* Active View — relative container for empty state positioning */}
@@ -157,6 +162,7 @@ export default function BoardView() {
       </div>
 
       <StatusConfigModal open={showStatusConfig} onClose={() => setShowStatusConfig(false)} />
+      <CustomFieldsConfigModal open={showCustomFields} onClose={() => setShowCustomFields(false)} />
     </div>
   )
 }
@@ -166,7 +172,9 @@ function TableView({
   addingToSprint, setAddingToSprint,
   newTaskTitle, setNewTaskTitle, handleQuickAddTask,
 }) {
-  const { updateSprint, deleteSprint, updateTask } = useSupabase()
+  const { updateSprint, deleteSprint, updateTask, setCustomFieldValue } = useSupabase()
+  const customFields = state.customFields || []
+  const gridTemplate = `minmax(250px,2fr) 120px 110px 110px 100px 100px${customFields.map(() => ' 100px').join('')} 70px`
   const { can } = usePermissions()
   const [sprintMenu, setSprintMenu] = useState(null)
   const [editingSprint, setEditingSprint] = useState(null)
@@ -377,13 +385,16 @@ function TableView({
 
             {!isCollapsed && (
               <div className="rounded-lg border border-border overflow-hidden bg-card">
-                <div className="grid grid-cols-[minmax(250px,2fr)_120px_110px_110px_100px_100px_70px] gap-0 bg-muted/50 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                <div className="grid gap-0 bg-muted/50 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider" style={{ gridTemplateColumns: gridTemplate }}>
                   <div className="px-3 py-2">Tarea</div>
                   <div className="px-3 py-2 text-center">Responsable</div>
                   <div className="px-3 py-2 text-center">Estado</div>
                   <div className="px-3 py-2 text-center">Fecha</div>
                   <div className="px-3 py-2 text-center">Prioridad</div>
                   <div className="px-3 py-2 text-center">Sprint</div>
+                  {customFields.map(cf => (
+                    <div key={cf.id} className="px-3 py-2 text-center truncate" title={cf.name}>{cf.name}</div>
+                  ))}
                   <div className="px-3 py-2 text-center"></div>
                 </div>
 
@@ -394,6 +405,8 @@ function TableView({
                     onDragStart={handleTaskDragStart}
                     onDragEnd={handleTaskDragEnd}
                     isDragging={draggedTask?.id === task.id}
+                    gridTemplate={gridTemplate}
+                    customFields={customFields}
                   />
                 ))}
 

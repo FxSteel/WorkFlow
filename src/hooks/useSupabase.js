@@ -531,6 +531,131 @@ export function useSupabase() {
     return { error }
   }, [dispatch])
 
+  // --- Custom Fields ---
+  const fetchCustomFields = useCallback(async (boardId) => {
+    const { data, error } = await supabase
+      .from('custom_fields')
+      .select('*, custom_field_options(*)')
+      .eq('board_id', boardId)
+      .order('position', { ascending: true })
+    if (!error && data) {
+      dispatch({ type: 'SET_CUSTOM_FIELDS', payload: data })
+    }
+    return { data, error }
+  }, [dispatch])
+
+  const createCustomField = useCallback(async (boardId, field) => {
+    const { data, error } = await supabase
+      .from('custom_fields')
+      .insert({ board_id: boardId, name: field.name, type: field.type, position: field.position || 0 })
+      .select('*, custom_field_options(*)')
+      .single()
+    if (!error && data) {
+      // If dropdown, create options
+      if (field.type === 'dropdown' && field.options?.length > 0) {
+        const opts = field.options.map((o, i) => ({ custom_field_id: data.id, label: o.label, color: o.color || '#6b7280', position: i }))
+        const { data: optsData } = await supabase.from('custom_field_options').insert(opts).select()
+        data.custom_field_options = optsData || []
+      }
+      dispatch({ type: 'ADD_CUSTOM_FIELD', payload: data })
+    }
+    return { data, error }
+  }, [dispatch])
+
+  const updateCustomField = useCallback(async (id, updates) => {
+    const { data, error } = await supabase
+      .from('custom_fields')
+      .update(updates)
+      .eq('id', id)
+      .select('*, custom_field_options(*)')
+      .single()
+    if (!error && data) {
+      dispatch({ type: 'UPDATE_CUSTOM_FIELD', payload: data })
+    }
+    return { data, error }
+  }, [dispatch])
+
+  const deleteCustomField = useCallback(async (id) => {
+    const { error } = await supabase.from('custom_fields').delete().eq('id', id)
+    if (!error) {
+      dispatch({ type: 'DELETE_CUSTOM_FIELD', payload: id })
+    }
+    return { error }
+  }, [dispatch])
+
+  const addCustomFieldOption = useCallback(async (fieldId, label, color, position) => {
+    const { data, error } = await supabase
+      .from('custom_field_options')
+      .insert({ custom_field_id: fieldId, label, color: color || '#6b7280', position: position || 0 })
+      .select()
+      .single()
+    return { data, error }
+  }, [])
+
+  const deleteCustomFieldOption = useCallback(async (optionId) => {
+    const { error } = await supabase.from('custom_field_options').delete().eq('id', optionId)
+    return { error }
+  }, [])
+
+  const fetchCustomFieldValues = useCallback(async (boardId) => {
+    // Get field IDs for this board, then fetch values for those fields
+    const { data: fields } = await supabase.from('custom_fields').select('id').eq('board_id', boardId)
+    if (!fields?.length) { dispatch({ type: 'SET_CUSTOM_FIELD_VALUES', payload: {} }); return }
+    const fieldIds = fields.map(f => f.id)
+    const { data, error } = await supabase
+      .from('task_custom_field_values')
+      .select('*')
+      .in('custom_field_id', fieldIds)
+    if (!error) {
+      const grouped = {}
+      ;(data || []).forEach(v => {
+        if (!grouped[v.task_id]) grouped[v.task_id] = []
+        grouped[v.task_id].push(v)
+      })
+      dispatch({ type: 'SET_CUSTOM_FIELD_VALUES', payload: grouped })
+    }
+    return { data, error }
+  }, [dispatch])
+
+  const setCustomFieldValue = useCallback(async (taskId, fieldId, fieldType, value) => {
+    const valueCol = fieldType === 'text' ? 'value_text'
+      : fieldType === 'number' ? 'value_number'
+      : fieldType === 'date' ? 'value_date'
+      : fieldType === 'dropdown' ? 'value_option_id'
+      : fieldType === 'price' ? 'value_price' : 'value_text'
+
+    // Optimistic update — update local state immediately
+    dispatch({ type: 'UPSERT_CUSTOM_FIELD_VALUE', payload: { taskId, fieldId, valueCol, value } })
+
+    const insertData = { task_id: taskId, custom_field_id: fieldId, [valueCol]: value }
+
+    // Upsert: try update first, then insert
+    const { data: existing } = await supabase
+      .from('task_custom_field_values')
+      .select('id')
+      .eq('task_id', taskId)
+      .eq('custom_field_id', fieldId)
+      .single()
+
+    let result
+    if (existing) {
+      result = await supabase
+        .from('task_custom_field_values')
+        .update({ [valueCol]: value })
+        .eq('id', existing.id)
+        .select()
+        .single()
+    } else {
+      result = await supabase
+        .from('task_custom_field_values')
+        .insert(insertData)
+        .select()
+        .single()
+    }
+
+    return result
+  }, [dispatch])
+
   return {
     fetchOrganizations,
     createOrganization,
@@ -567,5 +692,13 @@ export function useSupabase() {
     initDefaultStatuses,
     removeOrgMember,
     updateOrgMember,
+    fetchCustomFields,
+    createCustomField,
+    updateCustomField,
+    deleteCustomField,
+    addCustomFieldOption,
+    deleteCustomFieldOption,
+    fetchCustomFieldValues,
+    setCustomFieldValue,
   }
 }

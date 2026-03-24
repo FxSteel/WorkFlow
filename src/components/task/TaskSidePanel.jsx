@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   X, Calendar, User, Flag, Tag, Layers, Clock,
   Trash2, Paperclip, MoreHorizontal, Check,
+  Type, Hash, DollarSign, ChevronDown,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
@@ -19,7 +20,7 @@ export default function TaskSidePanel() {
   const { state, dispatch, closeSidePanel } = useApp()
   const { user } = useAuth()
   const { notifyTaskAssigned } = useNotifications()
-  const { updateTask, deleteTask, createTask } = useSupabase()
+  const { updateTask, deleteTask, createTask, setCustomFieldValue } = useSupabase()
   const task = state.sidePanelTask
   const isNew = task && !task.id
 
@@ -270,6 +271,85 @@ export default function TaskSidePanel() {
             />
           </PropRow>
 
+          {/* Custom Fields */}
+          {(state.customFields || []).map(cf => {
+            const values = state.customFieldValues?.[task.id] || []
+            const cfVal = values.find(v => v.custom_field_id === cf.id)
+            const CFIcon = cf.type === 'number' ? Hash : cf.type === 'date' ? Calendar : cf.type === 'price' ? DollarSign : cf.type === 'dropdown' ? ChevronDown : Type
+
+            if (cf.type === 'dropdown') {
+              const opts = cf.custom_field_options || []
+              const selectedOpt = opts.find(o => o.id === cfVal?.value_option_id)
+              return (
+                <PropRow key={cf.id} icon={CFIcon} label={cf.name}>
+                  <Select
+                    value={cfVal?.value_option_id || '_none'}
+                    onValueChange={async (val) => {
+                      if (isNew) return
+                      await setCustomFieldValue(task.id, cf.id, 'dropdown', val === '_none' ? null : val)
+                    }}
+                  >
+                    <SelectTrigger className="border-0 bg-transparent h-7 px-1 text-sm hover:bg-accent w-auto">
+                      {selectedOpt ? (
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white" style={{ backgroundColor: selectedOpt.color }}>{selectedOpt.label}</span>
+                      ) : (
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <ChevronDown className="w-3.5 h-3.5" />
+                          Vacío
+                        </span>
+                      )}
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">Sin asignar</SelectItem>
+                      {opts.map(o => (
+                        <SelectItem key={o.id} value={o.id}>
+                          <span className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white" style={{ backgroundColor: o.color }}>{o.label}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </PropRow>
+              )
+            }
+
+            if (cf.type === 'date') {
+              return (
+                <PropRow key={cf.id} icon={CFIcon} label={cf.name}>
+                  <DatePicker
+                    value={cfVal?.value_date || ''}
+                    onChange={async (val) => {
+                      if (isNew) return
+                      await setCustomFieldValue(task.id, cf.id, 'date', val || null)
+                    }}
+                    placeholder="Vacío"
+                    size="sm"
+                    className="border-0 bg-transparent hover:bg-accent"
+                  />
+                </PropRow>
+              )
+            }
+
+            const displayValue = cf.type === 'text' ? (cfVal?.value_text || '')
+              : cf.type === 'number' ? (cfVal?.value_number ?? '')
+              : cf.type === 'price' ? (cfVal?.value_price ?? '')
+              : ''
+            const hasValue = displayValue !== '' && displayValue !== null
+
+            return (
+              <PropRow key={cf.id} icon={CFIcon} label={cf.name}>
+                <CustomFieldInput
+                  type={cf.type}
+                  defaultValue={displayValue}
+                  hasValue={hasValue}
+                  onSave={async (val) => {
+                    if (isNew) return
+                    await setCustomFieldValue(task.id, cf.id, cf.type, cf.type === 'number' || cf.type === 'price' ? (val ? Number(val) : null) : (val || null))
+                  }}
+                />
+              </PropRow>
+            )
+          })}
+
           {task.created_at && (
             <PropRow icon={Clock} label="Creada">
               <span className="text-sm text-muted-foreground px-1">
@@ -316,6 +396,55 @@ export default function TaskSidePanel() {
       )}
     </div>
     </>
+  )
+}
+
+function CustomFieldInput({ type, defaultValue, hasValue, onSave }) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState(defaultValue)
+
+  useEffect(() => { setVal(defaultValue) }, [defaultValue])
+
+  if (!editing && !hasValue) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors px-1"
+      >
+        <Type className="w-3.5 h-3.5" />
+        Vacío
+      </button>
+    )
+  }
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        className="text-sm text-foreground hover:bg-accent/30 rounded px-1 transition-colors"
+      >
+        {type === 'price' ? `$${defaultValue}` : defaultValue}
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      {type === 'price' && <span className="text-xs text-muted-foreground">$</span>}
+      <input
+        type={type === 'number' || type === 'price' ? 'number' : 'text'}
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onBlur={async () => {
+          await onSave(val)
+          setEditing(false)
+        }}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { setVal(defaultValue); setEditing(false) } }}
+        maxLength={type === 'text' ? 30 : undefined}
+        className="text-sm bg-transparent text-foreground focus:outline-none placeholder:text-muted-foreground/50 flex-1 bg-accent/30 rounded px-1.5 py-0.5"
+        autoFocus
+      />
+    </div>
   )
 }
 
