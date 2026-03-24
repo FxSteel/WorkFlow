@@ -8,6 +8,7 @@ import { useApp } from '../../context/AppContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
+import EmptyState from '../ui/EmptyState'
 
 const TYPE_CONFIG = {
   task_assigned: { icon: ClipboardList, color: 'text-blue-500', bg: 'bg-blue-500/10' },
@@ -231,12 +232,11 @@ export default function NotificationCenter() {
 
                 {/* Notifications */}
                 {filteredNotifications.length === 0 && invites.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-10 px-4">
-                    <Bell className="w-8 h-8 text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground text-center">
-                      {activeTab === 'unread' ? 'No hay notificaciones sin leer' : 'No tienes notificaciones'}
-                    </p>
-                  </div>
+                  <EmptyState
+                    title={activeTab === 'unread' ? 'Sin notificaciones nuevas' : 'Sin notificaciones'}
+                    description="Aqui veran menciones, asignaciones y actualizaciones."
+                    compact
+                  />
                 )}
 
                 {filteredNotifications.map(notif => {

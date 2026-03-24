@@ -32,6 +32,14 @@ function appReducer(state, action) {
       return { ...state, currentOrg: action.payload }
     case 'SET_ORG_MEMBERS':
       return { ...state, orgMembers: action.payload, members: action.payload }
+    case 'UPDATE_ORG_MEMBER': {
+      const updated = state.orgMembers.map(m => m.id === action.payload.id ? { ...m, ...action.payload } : m)
+      return { ...state, orgMembers: updated, members: updated }
+    }
+    case 'REMOVE_ORG_MEMBER': {
+      const filtered = state.orgMembers.filter(m => m.id !== action.payload)
+      return { ...state, orgMembers: filtered, members: filtered }
+    }
     case 'ADD_ORGANIZATION':
       return { ...state, organizations: [...state.organizations, action.payload] }
     case 'UPDATE_ORGANIZATION': {

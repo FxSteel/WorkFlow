@@ -4,15 +4,20 @@ import {
   AlertTriangle, Upload, CheckCircle2, Loader2,
   SlidersHorizontal, PanelRight, Maximize2, Layers,
   CreditCard, Sparkles, Check, ExternalLink,
+  Mail, Send, Shield, UserPlus, Clock, Users,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useApp } from '../../context/AppContext'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
 import { toast } from 'sonner'
+import { useSupabase } from '../../hooks/useSupabase'
+import { supabaseAdmin } from '../../lib/supabase-admin'
+import { usePermissions } from '../../hooks/usePermissions'
 
 const TABS = [
   { id: 'general', label: 'Configuración general', icon: Settings },
+  { id: 'members', label: 'Miembros', icon: Users },
   { id: 'preferences', label: 'Preferencias', icon: SlidersHorizontal },
   { id: 'notifications', label: 'Notificaciones', icon: Bell },
   { id: 'billing', label: 'Facturación', icon: CreditCard },
@@ -20,11 +25,17 @@ const TABS = [
 ]
 
 export default function SettingsModal({ isOpen, onClose }) {
-  const [activeTab, setActiveTab] = useState('general')
+  const { can } = usePermissions()
+  const [activeTab, setActiveTab] = useState('preferences')
 
   useEffect(() => {
-    if (isOpen) setActiveTab('general')
+    if (isOpen) setActiveTab(can('editOrgSettings') ? 'general' : 'preferences')
   }, [isOpen])
+
+  const visibleTabs = TABS.filter(tab => {
+    if (tab.id === 'general' || tab.id === 'members') return can('editOrgSettings')
+    return true
+  })
 
   if (!isOpen) return null
 
@@ -39,7 +50,7 @@ export default function SettingsModal({ isOpen, onClose }) {
             <h2 className="text-sm font-semibold text-foreground">Configuración</h2>
           </div>
           <nav className="flex-1 p-2 space-y-0.5">
-            {TABS.map(tab => {
+            {visibleTabs.map(tab => {
               const Icon = tab.icon
               return (
                 <button
@@ -79,6 +90,7 @@ export default function SettingsModal({ isOpen, onClose }) {
 
           <div className="flex-1 overflow-y-auto">
             {activeTab === 'general' && <GeneralSettings />}
+            {activeTab === 'members' && <MembersSettings />}
             {activeTab === 'preferences' && <PreferencesSettings />}
             {activeTab === 'billing' && <BillingSettings />}
             {activeTab === 'notifications' && <NotificationSettings />}
@@ -249,30 +261,14 @@ function GeneralSettings() {
       {/* Org details */}
       <section>
         <h4 className="text-sm font-semibold text-foreground mb-1">Detalles</h4>
-        <div className="space-y-3">
+        <div className="space-y-1">
           <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="text-sm text-foreground">Propietario</p>
-              <p className="text-xs text-muted-foreground">{isOwner ? `${user?.user_metadata?.full_name || user?.email} (tú)` : 'Otro usuario'}</p>
-            </div>
+            <p className="text-sm text-foreground">Propietario</p>
+            <p className="text-xs text-muted-foreground">{isOwner ? `${user?.user_metadata?.full_name || user?.email} (tú)` : 'Otro usuario'}</p>
           </div>
           <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="text-sm text-foreground">Miembros</p>
-              <p className="text-xs text-muted-foreground">{state.orgMembers.length} miembro{state.orgMembers.length !== 1 ? 's' : ''}</p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="text-sm text-foreground">Espacios de trabajo</p>
-              <p className="text-xs text-muted-foreground">{state.workspaces.length} espacio{state.workspaces.length !== 1 ? 's' : ''}</p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="text-sm text-foreground">Creada</p>
-              <p className="text-xs text-muted-foreground">{org.created_at ? new Date(org.created_at).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}</p>
-            </div>
+            <p className="text-sm text-foreground">Creada</p>
+            <p className="text-xs text-muted-foreground">{org.created_at ? new Date(org.created_at).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}</p>
           </div>
         </div>
       </section>
@@ -328,6 +324,341 @@ function GeneralSettings() {
           </div>
         </section>
       )}
+    </div>
+  )
+}
+
+const ROLE_OPTIONS = [
+  { value: 'viewer', label: 'Visualizador', description: 'Solo puede ver, no editar' },
+  { value: 'member', label: 'Miembro', description: 'Puede crear y editar tareas' },
+  { value: 'admin', label: 'Admin', description: 'Acceso total a la organizacion' },
+]
+
+function MembersSettings() {
+  const { user } = useAuth()
+  const { state } = useApp()
+  const { fetchInvites, createInvite, deleteInvite, fetchMembers, removeOrgMember, updateOrgMember } = useSupabase()
+
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState('member')
+  const [selectedWorkspaces, setSelectedWorkspaces] = useState([])
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const [editingMember, setEditingMember] = useState(null) // member id being edited
+  const [editRole, setEditRole] = useState('')
+  const [editWsIds, setEditWsIds] = useState([])
+  const [deleteMemberId, setDeleteMemberId] = useState(null)
+
+  const org = state.currentOrg
+  const isOwner = org?.owner_id === user?.id
+  const currentMember = state.orgMembers.find(m => m.user_id === user?.id)
+  const canInvite = isOwner || currentMember?.role === 'admin'
+
+  useEffect(() => {
+    if (org) {
+      fetchInvites(org.id)
+      fetchMembers(org.id)
+    }
+  }, [org?.id])
+
+  useEffect(() => {
+    if (role === 'admin') {
+      setSelectedWorkspaces(state.workspaces.map(w => w.id))
+    } else {
+      setSelectedWorkspaces([])
+    }
+  }, [role])
+
+  const toggleWorkspace = (wsId) => {
+    if (role === 'admin') return
+    setSelectedWorkspaces(prev =>
+      prev.includes(wsId) ? prev.filter(id => id !== wsId) : [...prev, wsId]
+    )
+  }
+
+  const handleSendInvite = async () => {
+    setError('')
+    if (!email.trim()) { setError('Ingresa un correo'); return }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) { setError('Correo invalido'); return }
+    if (role === 'member' && selectedWorkspaces.length === 0) { setError('Selecciona al menos un espacio'); return }
+
+    const inviteEmail = email.trim().toLowerCase()
+    if (state.invites.find(i => i.email === inviteEmail && i.status === 'pending')) { setError('Ya hay una invitacion pendiente'); return }
+    if (state.orgMembers.find(m => m.email === inviteEmail)) { setError('Ya es miembro'); return }
+
+    setSending(true)
+    const wsIds = role === 'admin' ? state.workspaces.map(w => w.id) : selectedWorkspaces
+
+    const { error: inviteError } = await createInvite({
+      org_id: org.id, email: inviteEmail, role, workspace_ids: wsIds,
+      invited_by: user.id, invited_by_name: user.user_metadata?.full_name || user.email, status: 'pending',
+    })
+
+    if (inviteError) { setError(inviteError.message); setSending(false); return }
+
+    // Try to send email
+    let emailSent = false
+    if (supabaseAdmin) {
+      const senderName = user.user_metadata?.full_name || user.email
+      const { error: emailErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(inviteEmail, {
+        redirectTo: window.location.origin,
+        data: { invited_to_org: org.name, invited_by: senderName },
+      })
+      if (!emailErr) emailSent = true
+    }
+
+    toast.success(emailSent ? `Invitacion enviada a ${inviteEmail}` : `Invitacion enviada a ${inviteEmail}`)
+    setEmail(''); setRole('member'); setSelectedWorkspaces([])
+    fetchInvites(org.id)
+    setSending(false)
+  }
+
+  const pendingInvites = state.invites.filter(i => i.status === 'pending')
+
+  if (!org) return null
+
+  return (
+    <div className="px-6 py-5 space-y-6">
+      {/* Invite Section */}
+      {canInvite && (
+        <section>
+          <h4 className="text-sm font-semibold text-foreground mb-1">Invitar miembros</h4>
+          <p className="text-xs text-muted-foreground mb-3">Invita personas a tu organización</p>
+
+          {error && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/20 mb-3">
+              <AlertTriangle className="w-3.5 h-3.5 text-destructive shrink-0" />
+              <span className="text-xs text-destructive">{error}</span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 mb-3">
+            <div className="relative flex-1">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError('') }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSendInvite() }}
+                placeholder="usuario@ejemplo.com"
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
+              />
+            </div>
+            <button
+              onClick={handleSendInvite}
+              disabled={sending || !email.trim()}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 shrink-0"
+            >
+              {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              Invitar
+            </button>
+          </div>
+
+          {/* Role */}
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            {ROLE_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setRole(opt.value)}
+                className={cn(
+                  'flex flex-col items-start px-3 py-2 rounded-lg border text-left transition-all',
+                  role === opt.value ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-muted-foreground/40'
+                )}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Shield className={cn('w-3 h-3', role === opt.value ? 'text-primary' : 'text-muted-foreground')} />
+                  <span className={cn('text-xs font-medium', role === opt.value ? 'text-primary' : 'text-foreground')}>{opt.label}</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground mt-0.5">{opt.description}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Workspace Selection for members */}
+          {role === 'member' && state.workspaces.length > 0 && (
+            <div className="space-y-1.5 max-h-[120px] overflow-y-auto rounded-lg border border-border p-1">
+              {state.workspaces.map(ws => {
+                const sel = selectedWorkspaces.includes(ws.id)
+                return (
+                  <button key={ws.id} onClick={() => toggleWorkspace(ws.id)}
+                    className={cn('w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left transition-colors', sel ? 'bg-primary/10' : 'hover:bg-accent/50')}>
+                    <div className="w-4 h-4 rounded flex items-center justify-center text-[8px] font-bold text-white shrink-0" style={{ backgroundColor: ws.color || '#6c5ce7' }}>
+                      {ws.name?.[0]?.toUpperCase()}
+                    </div>
+                    <span className="text-xs text-foreground flex-1 truncate">{ws.name}</span>
+                    {sel && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {role === 'admin' && (
+            <p className="text-[10px] text-muted-foreground flex items-center gap-1"><Shield className="w-3 h-3" /> Acceso total a todos los espacios</p>
+          )}
+        </section>
+      )}
+
+      {/* Pending Invites */}
+      {pendingInvites.length > 0 && (
+        <section>
+          <h4 className="text-sm font-semibold text-foreground mb-2">Invitaciones pendientes ({pendingInvites.length})</h4>
+          <div className="space-y-1">
+            {pendingInvites.map(invite => (
+              <div key={invite.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-accent/50 transition-colors group">
+                <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center">
+                  <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground truncate">{invite.email}</p>
+                  <p className="text-[10px] text-muted-foreground">{invite.role === 'admin' ? 'Admin' : invite.role === 'viewer' ? 'Visualizador' : 'Miembro'}</p>
+                </div>
+                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-yellow-500 text-white">Pendiente</span>
+                {canInvite && (
+                  <button onClick={async () => { await deleteInvite(invite.id); fetchInvites(org.id); toast.success('Invitacion cancelada') }}
+                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Members List */}
+      <section>
+        <h4 className="text-sm font-semibold text-foreground mb-2">Miembros ({state.orgMembers.length})</h4>
+        <div className="space-y-1">
+          {state.orgMembers.map(member => {
+            const isMemberOwner = member.role === 'owner'
+            const isMe = member.user_id === user?.id
+            const canEdit = canInvite && !isMemberOwner && !isMe
+            const isEditing = editingMember === member.id
+            const memberWsIds = member.workspace_ids || []
+            return (
+              <div key={member.id} className={cn(
+                'rounded-lg transition-colors',
+                isMemberOwner ? 'bg-primary/5 border border-primary/10' : isEditing ? 'bg-accent/30 border border-border' : 'hover:bg-accent/50'
+              )}>
+                {/* Member row */}
+                <div className="flex items-center gap-3 px-3 py-2 group">
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold text-white overflow-hidden"
+                    style={{ backgroundColor: member.color || '#6c5ce7' }}>
+                    {member.avatar_url ? (
+                      <img src={member.avatar_url} alt="" className="w-full h-full rounded-full object-cover" referrerPolicy="no-referrer" />
+                    ) : member.name?.[0]?.toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-foreground truncate">{member.name}{isMe && ' (tú)'}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {member.email}
+                      {member.role === 'member' && memberWsIds.length > 0 && (
+                        <span> · {memberWsIds.length} espacio{memberWsIds.length !== 1 ? 's' : ''}</span>
+                      )}
+                    </p>
+                  </div>
+                  <span className={cn(
+                    'px-1.5 py-0.5 rounded-full text-[9px] font-medium',
+                    isMemberOwner ? 'bg-primary/10 text-primary' : member.role === 'admin' ? 'bg-blue-500/10 text-blue-500' : member.role === 'viewer' ? 'bg-orange-500/10 text-orange-500' : 'bg-muted text-muted-foreground'
+                  )}>
+                    {member.role === 'owner' ? 'Owner' : member.role === 'admin' ? 'Admin' : member.role === 'viewer' ? 'Visualizador' : 'Miembro'}
+                  </span>
+                  {canEdit && !isEditing && (
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                      <button onClick={() => {
+                        setEditingMember(member.id)
+                        setEditRole(member.role)
+                        setEditWsIds(member.workspace_ids || [])
+                        setDeleteMemberId(null)
+                      }} className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground" title="Editar acceso">
+                        <SlidersHorizontal className="w-3 h-3" />
+                      </button>
+                      <button onClick={() => { setDeleteMemberId(member.id); setEditingMember(null) }}
+                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive" title="Eliminar">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                  {deleteMemberId === member.id && (
+                    <div className="flex items-center gap-1">
+                      <button onClick={async () => { await removeOrgMember(member.id); toast.success(`${member.name} eliminado`); setDeleteMemberId(null) }}
+                        className="text-[9px] px-1.5 py-0.5 rounded bg-destructive text-white">Eliminar</button>
+                      <button onClick={() => setDeleteMemberId(null)}
+                        className="text-[9px] px-1.5 py-0.5 rounded border border-border">Cancelar</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Edit panel */}
+                {isEditing && (
+                  <div className="px-3 pb-3 pt-1 border-t border-border/50 space-y-3">
+                    {/* Role selector */}
+                    <div>
+                      <label className="text-[10px] font-medium text-muted-foreground mb-1.5 block">Rol</label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {ROLE_OPTIONS.map(opt => (
+                          <button key={opt.value} onClick={() => {
+                            setEditRole(opt.value)
+                            if (opt.value === 'admin') setEditWsIds(state.workspaces.map(w => w.id))
+                          }} className={cn(
+                            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-left transition-all',
+                            editRole === opt.value ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-muted-foreground/40'
+                          )}>
+                            <Shield className={cn('w-3 h-3', editRole === opt.value ? 'text-primary' : 'text-muted-foreground')} />
+                            <span className={cn('text-[11px] font-medium', editRole === opt.value ? 'text-primary' : 'text-foreground')}>{opt.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Workspace access — only for member role */}
+                    {editRole === 'member' && state.workspaces.length > 0 && (
+                      <div>
+                        <label className="text-[10px] font-medium text-muted-foreground mb-1.5 block">Espacios de trabajo</label>
+                        <div className="space-y-1 max-h-[100px] overflow-y-auto rounded-md border border-border p-1">
+                          {state.workspaces.map(ws => {
+                            const sel = editWsIds.includes(ws.id)
+                            return (
+                              <button key={ws.id} onClick={() => setEditWsIds(prev => sel ? prev.filter(id => id !== ws.id) : [...prev, ws.id])}
+                                className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors', sel ? 'bg-primary/10' : 'hover:bg-accent/50')}>
+                                <div className="w-4 h-4 rounded flex items-center justify-center text-[7px] font-bold text-white shrink-0" style={{ backgroundColor: ws.color || '#6c5ce7' }}>
+                                  {ws.name?.[0]?.toUpperCase()}
+                                </div>
+                                <span className="text-[11px] text-foreground flex-1 truncate">{ws.name}</span>
+                                {sel && <Check className="w-3 h-3 text-primary shrink-0" />}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {editRole === 'admin' && (
+                      <p className="text-[10px] text-muted-foreground flex items-center gap-1"><Shield className="w-3 h-3" /> Acceso total a todos los espacios</p>
+                    )}
+
+                    {/* Save / Cancel */}
+                    <div className="flex items-center gap-2">
+                      <button onClick={async () => {
+                        const wsIds = editRole === 'admin' ? state.workspaces.map(w => w.id) : editWsIds
+                        await updateOrgMember(member.id, { role: editRole, workspace_ids: wsIds })
+                        toast.success(`Acceso de ${member.name} actualizado`)
+                        setEditingMember(null)
+                      }} className="px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+                        Guardar
+                      </button>
+                      <button onClick={() => setEditingMember(null)}
+                        className="px-3 py-1.5 rounded-md text-[11px] font-medium bg-secondary text-secondary-foreground hover:bg-accent transition-colors">
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </section>
     </div>
   )
 }

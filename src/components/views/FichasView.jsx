@@ -1,4 +1,5 @@
 import { useApp } from '../../context/AppContext'
+import EmptyState from '../ui/EmptyState'
 import { cn } from '../../lib/utils'
 import { STATUS_COLORS, PRIORITY_CONFIG } from '../../lib/constants'
 
@@ -83,9 +84,7 @@ export default function FichasView() {
         })}
 
         {state.tasks.length === 0 && (
-          <div className="col-span-full flex items-center justify-center py-20">
-            <p className="text-sm text-muted-foreground">No hay tareas para mostrar</p>
-          </div>
+          <EmptyState title="Sin tareas" description="Crea tu primera tarea para comenzar a organizar tu trabajo." />
         )}
       </div>
     </div>

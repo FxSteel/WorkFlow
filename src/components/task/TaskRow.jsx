@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { MoreHorizontal, Edit, Trash2, GripVertical, Copy } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
+import { usePermissions } from '../../hooks/usePermissions'
 import { useSupabase } from '../../hooks/useSupabase'
 import DatePicker from '../ui/DatePicker'
 import { cn } from '../../lib/utils'
@@ -46,6 +47,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
   const { user } = useAuth()
   const { updateTask, deleteTask, createTask } = useSupabase()
   const { notifyTaskAssigned } = useNotifications()
+  const { can } = usePermissions()
 
   const assignableUsers = useMemo(() => {
     return state.orgMembers.map(m => ({
@@ -129,8 +131,9 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
 
   return (
     <div
-      draggable
+      draggable={can('moveTask')}
       onDragStart={(e) => {
+        if (!can('moveTask')) { e.preventDefault(); return }
         e.dataTransfer.effectAllowed = 'move'
         onDragStart?.(task)
       }}
@@ -142,7 +145,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
     >
       {/* Task Name */}
       <div className="px-3 py-2.5 flex items-center gap-2 min-w-0">
-        <GripVertical className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 cursor-grab" />
+        {can('moveTask') && <GripVertical className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 cursor-grab" />}
         <button
           onClick={() => openTask(task)}
           className="truncate text-foreground hover:text-primary transition-colors text-left"
@@ -155,7 +158,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
       <div className="px-3 py-2.5 flex items-center justify-center">
         <button
           ref={assignee.triggerRef}
-          onClick={() => { assignee.updatePos('left', 176); assignee.setOpen(!assignee.open) }}
+          onClick={() => { if (!can('editTask')) return; assignee.updatePos('left', 176); assignee.setOpen(!assignee.open) }}
           className="flex items-center gap-1.5 hover:bg-accent rounded px-1.5 py-0.5 transition-colors"
         >
           {task.assignee_name ? (
@@ -230,7 +233,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
           return (
             <button
               ref={status.triggerRef}
-              onClick={() => { status.updatePos('left', 144); status.setOpen(!status.open) }}
+              onClick={() => { if (!can('editTask')) return; status.updatePos('left', 144); status.setOpen(!status.open) }}
               className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white whitespace-nowrap transition-opacity hover:opacity-80"
               style={{ backgroundColor: statusColor }}
             >
@@ -276,7 +279,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
       <div className="px-3 py-2.5 flex items-center justify-center">
         <button
           ref={priority.triggerRef}
-          onClick={() => { priority.updatePos('left', 112); priority.setOpen(!priority.open) }}
+          onClick={() => { if (!can('editTask')) return; priority.updatePos('left', 112); priority.setOpen(!priority.open) }}
           className={cn(
             'px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity hover:opacity-80',
             priorityConfig.color,
@@ -312,7 +315,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
       <div className="px-2 py-2.5 flex items-center justify-center">
         <button
           ref={sprint.triggerRef}
-          onClick={() => { sprint.updatePos('left', 140); sprint.setOpen(!sprint.open) }}
+          onClick={() => { if (!can('editTask')) return; sprint.updatePos('left', 140); sprint.setOpen(!sprint.open) }}
           className="px-2 py-0.5 rounded text-[11px] font-medium text-muted-foreground hover:bg-accent truncate max-w-[100px] transition-colors flex items-center gap-1.5"
         >
           <div
@@ -352,13 +355,15 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging }) {
 
       {/* Actions */}
       <div className="px-3 py-2.5 flex items-center justify-center">
-        <button
-          ref={actions.triggerRef}
-          onClick={() => { actions.updatePos('right', 160); actions.setOpen(!actions.open) }}
-          className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
-        >
-          <MoreHorizontal className="w-4 h-4" />
-        </button>
+        {can('editTask') && (
+          <button
+            ref={actions.triggerRef}
+            onClick={() => { actions.updatePos('right', 160); actions.setOpen(!actions.open) }}
+            className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+        )}
 
         {actions.open && createPortal(
           <div

@@ -12,7 +12,8 @@ import { cn } from '../../lib/utils'
 import { toast } from 'sonner'
 
 const ROLE_OPTIONS = [
-  { value: 'member', label: 'Miembro', description: 'Acceso a espacios seleccionados' },
+  { value: 'viewer', label: 'Visualizador', description: 'Solo puede ver, no editar' },
+  { value: 'member', label: 'Miembro', description: 'Puede crear y editar tareas' },
   { value: 'admin', label: 'Admin', description: 'Acceso total a la organizacion' },
 ]
 
@@ -25,7 +26,7 @@ const STATUS_CONFIG = {
 export default function InviteModal({ isOpen, onClose }) {
   const { state } = useApp()
   const { user } = useAuth()
-  const { fetchInvites, createInvite, deleteInvite, fetchMembers } = useSupabase()
+  const { fetchInvites, createInvite, deleteInvite, fetchMembers, removeOrgMember } = useSupabase()
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('member')
   const [selectedWorkspaces, setSelectedWorkspaces] = useState([])
@@ -33,6 +34,7 @@ export default function InviteModal({ isOpen, onClose }) {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [activeTab, setActiveTab] = useState('invite')
+  const [deleteMemberId, setDeleteMemberId] = useState(null)
 
   const currentOrg = state.currentOrg
 
@@ -124,6 +126,7 @@ export default function InviteModal({ isOpen, onClose }) {
     }
 
     // 2. Send invite email
+    let emailSent = false
     if (supabaseAdmin) {
       const senderName = user.user_metadata?.full_name || user.email
       const senderInitials = senderName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
@@ -138,16 +141,30 @@ export default function InviteModal({ isOpen, onClose }) {
       })
 
       if (inviteEmailError) {
+        // User already registered — generate magic link and send via admin
         if (inviteEmailError.message?.includes('already been registered')) {
-          toast.success(`Invitacion enviada a ${inviteEmail} (ya tiene cuenta)`)
-        } else {
-          toast.success(`Invitacion guardada para ${inviteEmail}`)
+          try {
+            const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+              type: 'magiclink',
+              email: inviteEmail,
+              options: { redirectTo: window.location.origin },
+            })
+            // generateLink generates but doesn't send email
+            // For existing users, they'll see the invite in-app via the bell icon
+            emailSent = false // Can't send email to existing users via Supabase
+          } catch (e) {
+            // Silent fail
+          }
         }
       } else {
-        toast.success(`Invitacion enviada a ${inviteEmail}`)
+        emailSent = true
       }
+    }
+
+    if (emailSent) {
+      toast.success(`Invitacion enviada por email a ${inviteEmail}`)
     } else {
-      toast.success(`Invitacion guardada para ${inviteEmail}`)
+      toast.success(`Invitacion enviada a ${inviteEmail}`)
     }
 
     setEmail('')
@@ -350,12 +367,14 @@ export default function InviteModal({ isOpen, onClose }) {
                 <div className="space-y-1">
                   {state.orgMembers.map(member => {
                     const isMemberOwner = member.role === 'owner'
+                    const isMe = member.user_id === user?.id
                     const memberWsCount = member.role === 'admin' || member.role === 'owner'
                       ? state.workspaces.length
                       : (member.workspace_ids || []).length
+                    const canRemove = canInvite && !isMemberOwner && !isMe
                     return (
                       <div key={member.id} className={cn(
-                        'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors',
+                        'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group',
                         isMemberOwner ? 'bg-primary/5 border border-primary/10' : 'hover:bg-accent/50'
                       )}>
                         <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white overflow-hidden"
@@ -367,7 +386,9 @@ export default function InviteModal({ isOpen, onClose }) {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{member.name}</p>
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {member.name}{isMe && ' (tu)'}
+                          </p>
                           <p className="text-xs text-muted-foreground truncate">
                             {member.email}
                             {member.role !== 'owner' && member.role !== 'admin' && memberWsCount > 0 && (
@@ -383,6 +404,36 @@ export default function InviteModal({ isOpen, onClose }) {
                         )}>
                           {member.role === 'owner' ? 'Owner' : member.role === 'admin' ? 'Admin' : 'Miembro'}
                         </span>
+                        {canRemove && (
+                          deleteMemberId === member.id ? (
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={async () => {
+                                  await removeOrgMember(member.id)
+                                  toast.success(`${member.name} eliminado`)
+                                  setDeleteMemberId(null)
+                                }}
+                                className="text-[10px] px-2 py-0.5 rounded bg-destructive text-white hover:bg-destructive/90"
+                              >
+                                Confirmar
+                              </button>
+                              <button
+                                onClick={() => setDeleteMemberId(null)}
+                                className="text-[10px] px-2 py-0.5 rounded border border-border hover:bg-accent"
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setDeleteMemberId(member.id)}
+                              className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all"
+                              title="Eliminar miembro"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )
+                        )}
                       </div>
                     )
                   })}

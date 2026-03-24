@@ -44,32 +44,40 @@ export default function AdminPanel() {
       if (data?.users) allUsers = data.users
     }
 
+    // Use admin client to bypass RLS and see ALL data
+    const adminClient = supabaseAdmin || supabase
+
     // Fetch org_members (to get org counts per user)
-    const { data: members } = await supabase.from('org_members').select('user_id, org_id')
+    const { data: members } = await adminClient.from('org_members').select('user_id, org_id')
 
     // Fetch all organizations
-    const { data: organizations } = await supabase.from('organizations').select('id, owner_id')
+    const { data: organizations } = await adminClient.from('organizations').select('id, owner_id')
 
     // Fetch all workspaces
-    const { data: workspaces } = await supabase.from('workspaces').select('id, owner_id, org_id')
+    const { data: workspaces } = await adminClient.from('workspaces').select('id, owner_id, org_id')
 
-    // Fetch task counts per board
-    const { data: tasks } = await supabase.from('tasks').select('id, board_id, boards(workspace_id)')
+    // Fetch tasks with assignee info
+    const { data: tasks } = await adminClient.from('tasks').select('id, assignee_id, board_id, boards(workspace_id)')
 
     // Fetch subscriptions
-    const { data: subs } = await supabase.from('subscriptions').select('*').order('created_at', { ascending: false })
+    const { data: subs } = await adminClient.from('subscriptions').select('*').order('created_at', { ascending: false })
 
     // Build user data
     const enrichedUsers = allUsers.map(u => {
-      const userOrgMemberships = members?.filter(m => m.user_id === u.id) || []
-      const orgIds = [...new Set(userOrgMemberships.map(m => m.org_id))]
+      // Orgs where user is owner
       const ownedOrgs = organizations?.filter(o => o.owner_id === u.id) || []
-      const userWorkspaces = workspaces?.filter(w => orgIds.includes(w.org_id)) || []
-      const wsIds = userWorkspaces.map(w => w.id)
-      const userTasks = tasks?.filter(t => {
+      const ownedOrgIds = ownedOrgs.map(o => o.id)
+
+      // Workspaces in orgs the user owns
+      const ownedWorkspaces = workspaces?.filter(w => ownedOrgIds.includes(w.org_id)) || []
+      const ownedWsIds = ownedWorkspaces.map(w => w.id)
+
+      // Tasks in workspaces the user owns
+      const orgTasks = tasks?.filter(t => {
         const wsId = t.boards?.workspace_id
-        return wsIds.includes(wsId)
+        return ownedWsIds.includes(wsId)
       }) || []
+
       const userSub = subs?.find(s => s.user_id === u.id)
 
       return {
@@ -80,10 +88,9 @@ export default function AdminPanel() {
         provider: u.app_metadata?.provider || 'email',
         created_at: u.created_at,
         last_sign_in: u.last_sign_in_at,
-        orgCount: orgIds.length,
-        ownedOrgs: ownedOrgs.length,
-        workspaceCount: wsIds.length,
-        taskCount: userTasks.length,
+        orgCount: ownedOrgs.length,
+        workspaceCount: ownedWorkspaces.length,
+        taskCount: orgTasks.length,
         subscription: userSub,
         banned: u.banned_until ? true : false,
       }

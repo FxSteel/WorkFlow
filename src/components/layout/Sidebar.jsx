@@ -61,16 +61,19 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
   const ctxRef = useRef(null)
   const orgDropdownRef = useRef(null)
 
-  // Check if current user is Owner or Admin in the current org
+  // Permissions
   const currentOrgMember = state.orgMembers.find(m => m.user_id === user?.id)
-  const canManageWorkspaces = currentOrgMember?.role === 'owner' || currentOrgMember?.role === 'admin'
+  const userRole = currentOrgMember?.role || 'viewer'
+  const canCreateWorkspace = userRole === 'owner' || userRole === 'admin' || userRole === 'member'
+  const canEditWorkspace = userRole === 'owner' || userRole === 'admin'
+  const canCreateBoard = userRole !== 'viewer'
+  const canManageWorkspaces = canEditWorkspace // for context menu
 
   // Filter workspaces based on member access
-  const visibleWorkspaces = canManageWorkspaces
+  const visibleWorkspaces = (userRole === 'owner' || userRole === 'admin')
     ? state.workspaces
     : state.workspaces.filter(ws => {
         const memberWsIds = currentOrgMember?.workspace_ids || []
-        // If no workspace_ids set, member has no access (must be explicitly granted)
         if (memberWsIds.length === 0) return false
         return memberWsIds.includes(ws.id)
       })
@@ -419,7 +422,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Espacios de trabajo
             </span>
-            {canManageWorkspaces && (
+            {canCreateWorkspace && (
               <button
                 onClick={() => setShowNewWorkspace(true)}
                 className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
@@ -646,11 +649,6 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
                     ))}
                   </div>
                 )}
-                <CtxMenuItem
-                  icon={UserPlus}
-                  label="Invitar miembros"
-                  onClick={() => { onOpenInviteModal?.(ctxMenu.data); setCtxMenu(null) }}
-                />
                 <CtxMenuItem
                   icon={Copy}
                   label="Copiar ID"

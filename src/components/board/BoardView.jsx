@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { Plus, ChevronDown, ChevronRight, Zap, MoreHorizontal, Pencil, Trash2, Calendar, Palette, AlertTriangle } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useSupabase } from '../../hooks/useSupabase'
+import { usePermissions } from '../../hooks/usePermissions'
 import TaskRow from '../task/TaskRow'
 import DatePicker from '../ui/DatePicker'
 import HomePage from '../home/HomePage'
@@ -15,10 +16,12 @@ import { cn } from '../../lib/utils'
 import BoardSkeleton from '../skeleton/BoardSkeleton'
 import { toast } from 'sonner'
 import StatusConfigModal from './StatusConfigModal'
+import EmptyState from '../ui/EmptyState'
 
 export default function BoardView() {
   const { state, openTaskModal } = useApp()
   const { fetchTasks, fetchSprints, fetchMembers, createTask, fetchBoardStatuses, initDefaultStatuses } = useSupabase()
+  const { can } = usePermissions()
   const [collapsedSprints, setCollapsedSprints] = useState({})
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [addingToSprint, setAddingToSprint] = useState(null)
@@ -132,7 +135,8 @@ export default function BoardView() {
         onOpenStatusConfig={() => setShowStatusConfig(true)}
       />
 
-      {/* Active View */}
+      {/* Active View — relative container for empty state positioning */}
+      <div className="flex-1 relative min-h-0">
       {activeView === 'tabla' && (
         <TableView
           state={state}
@@ -150,6 +154,7 @@ export default function BoardView() {
       {activeView === 'gantt' && <GanttView />}
       {activeView === 'fichas' && <FichasView />}
       {activeView === 'cronograma' && <CronogramaView />}
+      </div>
 
       <StatusConfigModal open={showStatusConfig} onClose={() => setShowStatusConfig(false)} />
     </div>
@@ -162,6 +167,7 @@ function TableView({
   newTaskTitle, setNewTaskTitle, handleQuickAddTask,
 }) {
   const { updateSprint, deleteSprint, updateTask } = useSupabase()
+  const { can } = usePermissions()
   const [sprintMenu, setSprintMenu] = useState(null)
   const [editingSprint, setEditingSprint] = useState(null)
   const [editSprintName, setEditSprintName] = useState('')
@@ -227,6 +233,10 @@ function TableView({
   }
 
   const unassignedTasks = state.tasks.filter(t => !t.sprint_id)
+
+  if (state.sprints.length === 0 && state.tasks.length === 0) {
+    return <EmptyState title="Sin tareas" description="Crea tu primera tarea o sprint para comenzar a organizar tu trabajo." />
+  }
 
   return (
     <div className="flex-1 overflow-auto p-4">
@@ -297,7 +307,7 @@ function TableView({
               )}
 
               {/* Sprint menu trigger */}
-              <div className="relative">
+              {can('editSprint') && <div className="relative">
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
@@ -362,7 +372,7 @@ function TableView({
                     </div>
                   </div>
                 )}
-              </div>
+              </div>}
             </div>
 
             {!isCollapsed && (
@@ -402,7 +412,7 @@ function TableView({
                       className="w-full px-2 py-1 text-sm bg-transparent text-foreground focus:outline-none placeholder:text-muted-foreground"
                     />
                   </div>
-                ) : (
+                ) : can('createTask') ? (
                   <button
                     onClick={() => setAddingToSprint(sprint.id)}
                     className="w-full px-3 py-2 flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors border-t border-border"
@@ -410,7 +420,7 @@ function TableView({
                     <Plus className="w-3.5 h-3.5" />
                     Agregar tarea
                   </button>
-                )}
+                ) : null}
               </div>
             )}
           </div>
@@ -480,7 +490,7 @@ function TableView({
                   className="w-full px-2 py-1 text-sm bg-transparent text-foreground focus:outline-none placeholder:text-muted-foreground"
                 />
               </div>
-            ) : (
+            ) : can('createTask') ? (
               <button
                 onClick={() => setAddingToSprint('_nosprint')}
                 className="w-full px-3 py-2 flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors border-t border-border"
@@ -488,7 +498,7 @@ function TableView({
                 <Plus className="w-3.5 h-3.5" />
                 Agregar tarea
               </button>
-            )}
+            ) : null}
           </div>
           )}
         </div>

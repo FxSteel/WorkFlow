@@ -373,6 +373,7 @@ export function useSupabase() {
       .insert(invite)
       .select()
       .single()
+    if (error) console.error('createInvite error:', error.message, error.code, invite)
     if (!error && data) dispatch({ type: 'ADD_INVITE', payload: data })
     return { data, error }
   }, [dispatch])
@@ -506,6 +507,30 @@ export function useSupabase() {
     return { error }
   }, [dispatch])
 
+  const updateOrgMember = useCallback(async (memberId, updates) => {
+    const { data, error } = await supabase
+      .from('org_members')
+      .update(updates)
+      .eq('id', memberId)
+      .select()
+      .single()
+    if (!error && data) {
+      dispatch({ type: 'UPDATE_ORG_MEMBER', payload: data })
+    }
+    return { data, error }
+  }, [dispatch])
+
+  const removeOrgMember = useCallback(async (memberId) => {
+    const { error } = await supabase
+      .from('org_members')
+      .delete()
+      .eq('id', memberId)
+    if (!error) {
+      dispatch({ type: 'REMOVE_ORG_MEMBER', payload: memberId })
+    }
+    return { error }
+  }, [dispatch])
+
   return {
     fetchOrganizations,
     createOrganization,
@@ -540,5 +565,7 @@ export function useSupabase() {
     updateBoardStatus,
     deleteBoardStatus,
     initDefaultStatuses,
+    removeOrgMember,
+    updateOrgMember,
   }
 }

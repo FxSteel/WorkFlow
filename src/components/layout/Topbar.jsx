@@ -7,6 +7,7 @@ import NotificationCenter from '../workspace/NotificationCenter'
 import StatusAvatar, { STATUS_CONFIG } from '../ui/StatusAvatar'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
+import { usePermissions } from '../../hooks/usePermissions'
 
 const DURATION_OPTIONS = [
   { label: '15 minutos', ms: 15 * 60 * 1000 },
@@ -28,6 +29,7 @@ export default function Topbar({ onNewTask, onNewSprint, onOpenSettings, onOpenP
   const { theme, toggleTheme } = useTheme()
   const { user, signOut } = useAuth()
   const { state, dispatch } = useApp()
+  const { can } = usePermissions()
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showStatusPicker, setShowStatusPicker] = useState(false)
   const [durationSubmenu, setDurationSubmenu] = useState(null) // status key
@@ -143,20 +145,24 @@ export default function Topbar({ onNewTask, onNewSprint, onOpenSettings, onOpenP
       <div className="flex items-center gap-2">
         {state.currentBoard && (
           <>
-            <button
-              onClick={onNewSprint}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-secondary text-secondary-foreground hover:bg-accent transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Sprint
-            </button>
-            <button
-              onClick={onNewTask}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Nueva tarea
-            </button>
+            {can('createSprint') && (
+              <button
+                onClick={onNewSprint}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-secondary text-secondary-foreground hover:bg-accent transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Sprint
+              </button>
+            )}
+            {can('createTask') && (
+              <button
+                onClick={onNewTask}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Nueva tarea
+              </button>
+            )}
           </>
         )}
 

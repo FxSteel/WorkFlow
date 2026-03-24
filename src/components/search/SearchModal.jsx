@@ -4,6 +4,7 @@ import {
   ArrowRight, Command, CornerDownLeft,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import EmptyState from '../ui/EmptyState'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
 import { PRIORITY_CONFIG, STATUS_COLORS } from '../../lib/constants'
@@ -155,9 +156,7 @@ export default function SearchModal({ isOpen, onClose }) {
           )}
 
           {showEmpty && (
-            <div className="px-4 py-8 text-center">
-              <p className="text-sm text-muted-foreground">No se encontraron resultados para "{query}"</p>
-            </div>
+            <EmptyState title="Sin resultados" description={`No se encontraron resultados para "${query}"`} compact />
           )}
 
           {!loading && hasResults && (
@@ -273,10 +272,7 @@ export default function SearchModal({ isOpen, onClose }) {
           )}
 
           {!query.trim() && !loading && (
-            <div className="px-4 py-8 text-center">
-              <Search className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">Escribe para buscar en todo WorkFlow</p>
-            </div>
+            <EmptyState title="Buscar en WorkFlow" description="Busca tableros, tareas y espacios de trabajo." compact />
           )}
         </div>
 

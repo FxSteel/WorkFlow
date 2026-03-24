@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import { cn } from '../../lib/utils'
 import { PRIORITY_CONFIG } from '../../lib/constants'
+import EmptyState from '../ui/EmptyState'
 
 export default function KanbanView() {
   const { state, openTask } = useApp()
@@ -76,6 +77,11 @@ export default function KanbanView() {
     }
     handleDragEnd()
   }
+
+  if (state.tasks.length === 0) {
+    return <EmptyState title="Sin tareas" description="Crea tu primera tarea para verla en el tablero Kanban." />
+  }
+
 
   return (
     <div className="flex-1 overflow-x-auto p-4">

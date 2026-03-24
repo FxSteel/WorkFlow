@@ -18,6 +18,7 @@ import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
 import { PRIORITY_CONFIG, STATUS_COLORS } from '../../lib/constants'
 import HomeSkeleton from '../skeleton/HomeSkeleton'
+import EmptyState from '../ui/EmptyState'
 
 export default function HomePage() {
   const { state, dispatch, openTask } = useApp()
@@ -337,15 +338,7 @@ export default function HomePage() {
                 </div>
               </div>
             ) : upcomingTasks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 px-4">
-                <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-3">
-                  <CheckCircle2 className="w-7 h-7 text-muted-foreground" />
-                </div>
-                <p className="text-sm font-medium text-foreground mb-1">Todo al día</p>
-                <p className="text-xs text-muted-foreground text-center max-w-xs">
-                  No hay tareas pendientes con fecha próxima. Crea nuevas tareas desde un tablero.
-                </p>
-              </div>
+              <EmptyState title="Todo al día" description="No hay tareas pendientes con fecha próxima. Crea nuevas tareas desde un tablero." />
             ) : (
               <>
                 {/* Table header */}

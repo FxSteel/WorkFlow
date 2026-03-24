@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import EmptyState from '../ui/EmptyState'
 import { useApp } from '../../context/AppContext'
 import { cn } from '../../lib/utils'
 import { STATUS_COLORS } from '../../lib/constants'
@@ -40,13 +41,7 @@ export default function GanttView() {
   })
 
   if (tasks.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-sm text-muted-foreground">Asigna fechas a tus tareas para ver el diagrama de Gantt</p>
-        </div>
-      </div>
-    )
+    return <EmptyState title="Sin datos para el Gantt" description="Asigna fechas a tus tareas para ver el diagrama de Gantt." />
   }
 
   return (
