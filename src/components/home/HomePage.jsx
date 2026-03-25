@@ -338,7 +338,7 @@ export default function HomePage() {
                 </div>
               </div>
             ) : upcomingTasks.length === 0 ? (
-              <EmptyState title="Todo al día" description="No hay tareas pendientes con fecha próxima. Crea nuevas tareas desde un tablero." />
+              <EmptyState compact title="Todo al día" description="No hay tareas pendientes con fecha próxima. Crea nuevas tareas desde un tablero." />
             ) : (
               <>
                 {/* Table header */}

@@ -6,7 +6,7 @@ import { cn } from '../../lib/utils'
 import { PRIORITY_CONFIG } from '../../lib/constants'
 import EmptyState from '../ui/EmptyState'
 
-export default function KanbanView() {
+export default function KanbanView({ isColVisible = () => true }) {
   const { state, openTask } = useApp()
   const { updateTask, createTask } = useSupabase()
   const [addingTo, setAddingTo] = useState(null)
@@ -139,19 +139,30 @@ export default function KanbanView() {
                     >
                       <p className="text-sm font-medium text-foreground mb-2 line-clamp-2">{task.title}</p>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className={cn(
-                          'px-1.5 py-0.5 rounded text-[10px] font-medium',
-                          priority.color, priority.text
-                        )}>
-                          {priority.label}
-                        </span>
-                        {task.due_date && (
+                        {isColVisible('priority') && (
+                          <span className={cn(
+                            'px-1.5 py-0.5 rounded text-[10px] font-medium',
+                            priority.color, priority.text
+                          )}>
+                            {priority.label}
+                          </span>
+                        )}
+                        {isColVisible('due_date') && task.due_date && (
                           <span className="text-[10px] text-muted-foreground">
                             {new Date(task.due_date + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })}
                           </span>
                         )}
+                        {isColVisible('sprint') && task.sprint_id && (() => {
+                          const s = state.sprints.find(sp => sp.id === task.sprint_id)
+                          return s ? (
+                            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.color || '#6c5ce7' }} />
+                              {s.name}
+                            </span>
+                          ) : null
+                        })()}
                       </div>
-                      {task.assignee_name && (() => {
+                      {isColVisible('assignee') && task.assignee_name && (() => {
                         const member = state.orgMembers.find(m => m.id === task.assignee_id)
                         return (
                           <div className="flex items-center gap-1.5 mt-2">
@@ -169,6 +180,29 @@ export default function KanbanView() {
                           </div>
                         )
                       })()}
+                      {/* Custom Fields */}
+                      {(state.customFields || []).filter(cf => isColVisible(`cf_${cf.id}`)).length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                          {(state.customFields || []).filter(cf => isColVisible(`cf_${cf.id}`)).map(cf => {
+                            const vals = state.customFieldValues?.[task.id] || []
+                            const cfVal = vals.find(v => v.custom_field_id === cf.id)
+                            if (!cfVal) return null
+
+                            if (cf.type === 'dropdown') {
+                              const opt = (cf.custom_field_options || []).find(o => o.id === cfVal.value_option_id)
+                              if (!opt) return null
+                              return <span key={cf.id} className="px-1.5 py-0.5 rounded-full text-[9px] font-medium text-white" style={{ backgroundColor: opt.color }}>{opt.label}</span>
+                            }
+                            const val = cfVal.value_text || cfVal.value_number || cfVal.value_price || cfVal.value_date
+                            if (!val) return null
+                            return (
+                              <span key={cf.id} className="text-[9px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                {cf.type === 'price' ? `$${val}` : cf.type === 'date' ? new Date(val + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' }) : val}
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
                   )
                 })}

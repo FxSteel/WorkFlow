@@ -19,6 +19,7 @@ import StatusConfigModal from './StatusConfigModal'
 import CustomFieldsConfigModal from './CustomFieldsConfigModal'
 import EmptyState from '../ui/EmptyState'
 import ColorPicker from '../ui/ColorPicker'
+import ColumnToggle from './ColumnToggle'
 
 export default function BoardView() {
   const { state, dispatch, openTaskModal } = useApp()
@@ -32,6 +33,27 @@ export default function BoardView() {
   const showCustomFields = state.showCustomFields
   const setShowStatusConfig = (v) => dispatch({ type: 'SHOW_STATUS_CONFIG', payload: v })
   const setShowCustomFields = (v) => dispatch({ type: 'SHOW_CUSTOM_FIELDS', payload: v })
+
+  // Column visibility per board (persisted in localStorage)
+  const [visibleColumns, setVisibleColumns] = useState({})
+
+  useEffect(() => {
+    if (state.currentBoard) {
+      const stored = localStorage.getItem(`workflow-columns-${state.currentBoard.id}`)
+      if (stored) try { setVisibleColumns(JSON.parse(stored)) } catch { setVisibleColumns({}) }
+      else setVisibleColumns({})
+    }
+  }, [state.currentBoard?.id])
+
+  const handleToggleColumn = (key, visible) => {
+    const updated = { ...visibleColumns, [key]: visible }
+    setVisibleColumns(updated)
+    if (state.currentBoard) {
+      localStorage.setItem(`workflow-columns-${state.currentBoard.id}`, JSON.stringify(updated))
+    }
+  }
+
+  const isColVisible = (key) => visibleColumns[key] !== false
 
   // Views state per board (persisted in localStorage)
   const [activeViews, setActiveViews] = useState(['tabla'])
@@ -139,6 +161,15 @@ export default function BoardView() {
         onChangeView={handleChangeView}
         onAddView={handleAddView}
         onRemoveView={handleRemoveView}
+        columnToggle={
+          ['tabla', 'kanban', 'fichas'].includes(activeView) ? (
+            <ColumnToggle
+              customFields={state.customFields || []}
+              visibleColumns={visibleColumns}
+              onToggle={handleToggleColumn}
+            />
+          ) : null
+        }
       />
 
       {/* Active View */}
@@ -153,12 +184,13 @@ export default function BoardView() {
           newTaskTitle={newTaskTitle}
           setNewTaskTitle={setNewTaskTitle}
           handleQuickAddTask={handleQuickAddTask}
+          isColVisible={isColVisible}
         />
       )}
-      {activeView === 'kanban' && <KanbanView />}
+      {activeView === 'kanban' && <KanbanView isColVisible={isColVisible} />}
       {activeView === 'calendario' && <CalendarView />}
       {activeView === 'gantt' && <GanttView />}
-      {activeView === 'fichas' && <FichasView />}
+      {activeView === 'fichas' && <FichasView isColVisible={isColVisible} />}
       {activeView === 'cronograma' && <CronogramaView />}
       </div>
 
@@ -172,10 +204,22 @@ function TableView({
   state, collapsedSprints, toggleSprint,
   addingToSprint, setAddingToSprint,
   newTaskTitle, setNewTaskTitle, handleQuickAddTask,
+  isColVisible,
 }) {
   const { updateSprint, deleteSprint, updateTask, setCustomFieldValue } = useSupabase()
   const customFields = state.customFields || []
-  const gridTemplate = `minmax(250px,2fr) 120px 110px 110px 100px 100px${customFields.map(cf => ` ${Math.max(cf.name.length * 9 + 24, 120)}px`).join('')} 70px`
+  const visibleCF = customFields.filter(cf => isColVisible(`cf_${cf.id}`))
+
+  const gridTemplate = [
+    'minmax(250px,2fr)',
+    isColVisible('assignee') ? '120px' : '0px',
+    isColVisible('status') ? '110px' : '0px',
+    isColVisible('due_date') ? '110px' : '0px',
+    isColVisible('priority') ? '100px' : '0px',
+    isColVisible('sprint') ? '100px' : '0px',
+    ...customFields.map(cf => isColVisible(`cf_${cf.id}`) ? `${Math.max(cf.name.length * 9 + 24, 120)}px` : '0px'),
+    '70px',
+  ].join(' ')
   const { can } = usePermissions()
   const [sprintMenu, setSprintMenu] = useState(null)
   const [editingSprint, setEditingSprint] = useState(null)
@@ -397,13 +441,13 @@ function TableView({
                 <div className="min-w-fit">
                 <div className="grid gap-0 bg-muted/50 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider" style={{ gridTemplateColumns: gridTemplate }}>
                   <div className="px-3 py-2">Tarea</div>
-                  <div className="px-3 py-2 text-center">Responsable</div>
-                  <div className="px-3 py-2 text-center">Estado</div>
-                  <div className="px-3 py-2 text-center">Fecha</div>
-                  <div className="px-3 py-2 text-center">Prioridad</div>
-                  <div className="px-3 py-2 text-center">Sprint</div>
+                  <div className={`px-3 py-2 text-center ${!isColVisible('assignee') ? 'overflow-hidden' : ''}`}>{isColVisible('assignee') ? 'Responsable' : ''}</div>
+                  <div className={`px-3 py-2 text-center ${!isColVisible('status') ? 'overflow-hidden' : ''}`}>{isColVisible('status') ? 'Estado' : ''}</div>
+                  <div className={`px-3 py-2 text-center ${!isColVisible('due_date') ? 'overflow-hidden' : ''}`}>{isColVisible('due_date') ? 'Fecha' : ''}</div>
+                  <div className={`px-3 py-2 text-center ${!isColVisible('priority') ? 'overflow-hidden' : ''}`}>{isColVisible('priority') ? 'Prioridad' : ''}</div>
+                  <div className={`px-3 py-2 text-center ${!isColVisible('sprint') ? 'overflow-hidden' : ''}`}>{isColVisible('sprint') ? 'Sprint' : ''}</div>
                   {customFields.map(cf => (
-                    <div key={cf.id} className="px-3 py-2 text-center whitespace-nowrap">{cf.name}</div>
+                    <div key={cf.id} className={`px-3 py-2 text-center whitespace-nowrap ${!isColVisible(`cf_${cf.id}`) ? 'overflow-hidden' : ''}`}>{isColVisible(`cf_${cf.id}`) ? cf.name : ''}</div>
                   ))}
                   <div className="px-3 py-2 text-center"></div>
                 </div>
@@ -417,6 +461,7 @@ function TableView({
                     isDragging={draggedTask?.id === task.id}
                     gridTemplate={gridTemplate}
                     customFields={customFields}
+                    isColVisible={isColVisible}
                   />
                 ))}
 
@@ -484,13 +529,13 @@ function TableView({
             <div className="min-w-fit">
             <div className="grid gap-0 bg-muted/50 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider" style={{ gridTemplateColumns: gridTemplate }}>
               <div className="px-3 py-2">Tarea</div>
-              <div className="px-3 py-2 text-center">Responsable</div>
-              <div className="px-3 py-2 text-center">Estado</div>
-              <div className="px-3 py-2 text-center">Fecha</div>
-              <div className="px-3 py-2 text-center">Prioridad</div>
-              <div className="px-3 py-2 text-center">Sprint</div>
+              <div className={`px-3 py-2 text-center ${!isColVisible('assignee') ? 'overflow-hidden' : ''}`}>{isColVisible('assignee') ? 'Responsable' : ''}</div>
+              <div className={`px-3 py-2 text-center ${!isColVisible('status') ? 'overflow-hidden' : ''}`}>{isColVisible('status') ? 'Estado' : ''}</div>
+              <div className={`px-3 py-2 text-center ${!isColVisible('due_date') ? 'overflow-hidden' : ''}`}>{isColVisible('due_date') ? 'Fecha' : ''}</div>
+              <div className={`px-3 py-2 text-center ${!isColVisible('priority') ? 'overflow-hidden' : ''}`}>{isColVisible('priority') ? 'Prioridad' : ''}</div>
+              <div className={`px-3 py-2 text-center ${!isColVisible('sprint') ? 'overflow-hidden' : ''}`}>{isColVisible('sprint') ? 'Sprint' : ''}</div>
               {customFields.map(cf => (
-                <div key={cf.id} className="px-3 py-2 text-center truncate" title={cf.name}>{cf.name}</div>
+                <div key={cf.id} className={`px-3 py-2 text-center whitespace-nowrap ${!isColVisible(`cf_${cf.id}`) ? 'overflow-hidden' : ''}`}>{isColVisible(`cf_${cf.id}`) ? cf.name : ''}</div>
               ))}
               <div className="px-3 py-2 text-center"></div>
             </div>
@@ -503,6 +548,7 @@ function TableView({
                 isDragging={draggedTask?.id === task.id}
                 gridTemplate={gridTemplate}
                 customFields={customFields}
+                isColVisible={isColVisible}
               />
             ))}
             </div>

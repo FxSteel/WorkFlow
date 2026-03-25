@@ -99,7 +99,7 @@ function CustomFieldDropdownCell({ cf, opts, selectedOpt, taskId, canEdit, setCu
   )
 }
 
-export default function TaskRow({ task, onDragStart, onDragEnd, isDragging, gridTemplate, customFields = [] }) {
+export default function TaskRow({ task, onDragStart, onDragEnd, isDragging, gridTemplate, customFields = [], isColVisible = () => true }) {
   const { state, openTask } = useApp()
   const { user } = useAuth()
   const { updateTask, deleteTask, createTask, setCustomFieldValue } = useSupabase()
@@ -213,7 +213,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging, grid
       </div>
 
       {/* Assignee */}
-      <div className="px-3 py-2.5 flex items-center justify-center">
+      <div className={`py-2.5 flex items-center justify-center ${isColVisible('assignee') ? 'px-3' : 'overflow-hidden w-0 p-0'}`}>
         <button
           ref={assignee.triggerRef}
           onClick={() => { if (!can('editTask')) return; assignee.updatePos('left', 176); assignee.setOpen(!assignee.open) }}
@@ -284,7 +284,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging, grid
       </div>
 
       {/* Status */}
-      <div className="px-3 py-2.5 flex items-center justify-center">
+      <div className={`py-2.5 flex items-center justify-center ${isColVisible('status') ? 'px-3' : 'overflow-hidden w-0 p-0'}`}>
         {(() => {
           const statusObj = (state.boardStatuses || []).find(s => s.name === task.status)
           const statusColor = statusObj?.color || '#9ca3af'
@@ -323,7 +323,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging, grid
       </div>
 
       {/* Due Date */}
-      <div className="px-3 py-1.5 flex items-center justify-center">
+      <div className={`py-1.5 flex items-center justify-center ${isColVisible('due_date') ? 'px-3' : 'overflow-hidden w-0 p-0'}`}>
         <DatePicker
           value={task.due_date || ''}
           onChange={(val) => updateTask(task.id, { due_date: val || null })}
@@ -334,7 +334,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging, grid
       </div>
 
       {/* Priority */}
-      <div className="px-3 py-2.5 flex items-center justify-center">
+      <div className={`py-2.5 flex items-center justify-center ${isColVisible('priority') ? 'px-3' : 'overflow-hidden w-0 p-0'}`}>
         <button
           ref={priority.triggerRef}
           onClick={() => { if (!can('editTask')) return; priority.updatePos('left', 112); priority.setOpen(!priority.open) }}
@@ -370,7 +370,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging, grid
       </div>
 
       {/* Sprint */}
-      <div className="px-2 py-2.5 flex items-center justify-center">
+      <div className={`py-2.5 flex items-center justify-center ${isColVisible('sprint') ? 'px-2' : 'overflow-hidden w-0 p-0'}`}>
         <button
           ref={sprint.triggerRef}
           onClick={() => { if (!can('editTask')) return; sprint.updatePos('left', 140); sprint.setOpen(!sprint.open) }}
@@ -413,8 +413,13 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging, grid
 
       {/* Custom Fields */}
       {customFields.map(cf => {
+        const cfVisible = isColVisible(`cf_${cf.id}`)
         const values = state.customFieldValues?.[task.id] || []
         const cfVal = values.find(v => v.custom_field_id === cf.id)
+
+        if (!cfVisible) {
+          return <div key={cf.id} className="overflow-hidden w-0 p-0" />
+        }
 
         if (cf.type === 'dropdown') {
           const opts = cf.custom_field_options || []

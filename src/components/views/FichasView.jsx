@@ -3,7 +3,7 @@ import EmptyState from '../ui/EmptyState'
 import { cn } from '../../lib/utils'
 import { STATUS_COLORS, PRIORITY_CONFIG } from '../../lib/constants'
 
-export default function FichasView() {
+export default function FichasView({ isColVisible = () => true }) {
   const { state, openTask, openTaskModal } = useApp()
 
   return (
@@ -20,18 +20,22 @@ export default function FichasView() {
             >
               {/* Status bar */}
               <div className="flex items-center justify-between mb-3">
-                <span className={cn(
-                  'px-2 py-0.5 rounded-full text-[10px] font-medium text-white',
-                  STATUS_COLORS[task.status]
-                )}>
-                  {task.status}
-                </span>
-                <span className={cn(
-                  'px-1.5 py-0.5 rounded text-[10px] font-medium',
-                  priority.color, priority.text
-                )}>
-                  {priority.label}
-                </span>
+                {isColVisible('status') && (
+                  <span className={cn(
+                    'px-2 py-0.5 rounded-full text-[10px] font-medium text-white',
+                    STATUS_COLORS[task.status]
+                  )}>
+                    {task.status}
+                  </span>
+                )}
+                {isColVisible('priority') && (
+                  <span className={cn(
+                    'px-1.5 py-0.5 rounded text-[10px] font-medium',
+                    priority.color, priority.text
+                  )}>
+                    {priority.label}
+                  </span>
+                )}
               </div>
 
               {/* Title */}
@@ -44,7 +48,7 @@ export default function FichasView() {
 
               {/* Footer */}
               <div className="flex items-center justify-between pt-2 border-t border-border">
-                {task.assignee_name ? (() => {
+                {isColVisible('assignee') && task.assignee_name ? (() => {
                   const member = state.orgMembers.find(m => m.id === task.assignee_id)
                   return (
                     <div className="flex items-center gap-1.5">

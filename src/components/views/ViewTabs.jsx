@@ -16,7 +16,7 @@ const ALL_VIEWS = [
 
 export { ALL_VIEWS }
 
-export default function ViewTabs({ activeViews, activeView, onChangeView, onAddView, onRemoveView }) {
+export default function ViewTabs({ activeViews, activeView, onChangeView, onAddView, onRemoveView, columnToggle }) {
   const [showAddMenu, setShowAddMenu] = useState(false)
   const menuRef = useRef(null)
 
@@ -117,6 +117,7 @@ export default function ViewTabs({ activeViews, activeView, onChangeView, onAddV
           <Filter className="w-3.5 h-3.5" />
           Filtrar
         </button>
+        {columnToggle}
       </div>
     </div>
   )
