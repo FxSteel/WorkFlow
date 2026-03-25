@@ -7,7 +7,7 @@ export default function FichasView() {
   const { state, openTask, openTaskModal } = useApp()
 
   return (
-    <div className="flex-1 overflow-auto p-4">
+    <div className="flex-1 min-h-0 overflow-auto p-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {state.tasks.map(task => {
           const priority = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium

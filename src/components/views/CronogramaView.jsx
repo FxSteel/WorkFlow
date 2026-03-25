@@ -44,7 +44,7 @@ export default function CronogramaView() {
   }, [state.tasks])
 
   return (
-    <div className="flex-1 overflow-auto p-4">
+    <div className="flex-1 min-h-0 overflow-auto p-4">
       <div className="space-y-4">
         {weeks.map((week, wi) => {
           const weekLabel = `${week.days[0].toLocaleDateString('es', { day: 'numeric', month: 'short' })} — ${week.days[6].toLocaleDateString('es', { day: 'numeric', month: 'short' })}`

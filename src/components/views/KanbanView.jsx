@@ -84,8 +84,8 @@ export default function KanbanView() {
 
 
   return (
-    <div className="flex-1 overflow-x-auto p-4">
-      <div className="flex gap-4 min-w-max h-full">
+    <div className="flex-1 min-h-0 overflow-auto p-4">
+      <div className="flex gap-4 min-w-max">
         {(state.boardStatuses || []).map(col => {
           const columnTasks = state.tasks.filter(t => t.status === col.name)
           const isOver = dragOverCol === col.name && draggedTask?.status !== col.name

@@ -23,6 +23,8 @@ const initialState = {
   isSidePanelOpen: false,
   loading: false,
   sidebarCollapsed: false,
+  showStatusConfig: false,
+  showCustomFields: false,
 }
 
 function appReducer(state, action) {
@@ -171,6 +173,10 @@ function appReducer(state, action) {
       return { ...state, loading: action.payload }
     case 'TOGGLE_SIDEBAR':
       return { ...state, sidebarCollapsed: !state.sidebarCollapsed }
+    case 'SHOW_STATUS_CONFIG':
+      return { ...state, showStatusConfig: action.payload }
+    case 'SHOW_CUSTOM_FIELDS':
+      return { ...state, showCustomFields: action.payload }
     case 'ADD_WORKSPACE':
       return { ...state, workspaces: [...state.workspaces, action.payload] }
     case 'UPDATE_WORKSPACE': {

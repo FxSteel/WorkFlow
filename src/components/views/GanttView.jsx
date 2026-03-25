@@ -45,7 +45,7 @@ export default function GanttView() {
   }
 
   return (
-    <div className="flex-1 overflow-auto p-4">
+    <div className="flex-1 min-h-0 overflow-auto p-4">
       <div className="flex">
         {/* Task names column */}
         <div className="w-[250px] shrink-0 border-r border-border">

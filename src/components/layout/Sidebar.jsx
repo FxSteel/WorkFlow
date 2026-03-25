@@ -16,6 +16,8 @@ import {
   MoreHorizontal,
   Building2,
   Check,
+  Settings2,
+  Puzzle,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
@@ -23,6 +25,7 @@ import { useSupabase } from '../../hooks/useSupabase'
 import { cn } from '../../lib/utils'
 import SidebarSkeleton from '../skeleton/SidebarSkeleton'
 import TeamPresence from '../workspace/TeamPresence'
+import ColorPicker from '../ui/ColorPicker'
 import { toast } from 'sonner'
 
 const WORKSPACE_COLORS = [
@@ -635,18 +638,12 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
                   hasSubmenu
                 />
                 {colorPicker === ctxMenu.id && (
-                  <div className="px-3 py-2 flex flex-wrap gap-1.5">
-                    {WORKSPACE_COLORS.map(color => (
-                      <button
-                        key={color}
-                        onClick={() => handleChangeColor(ctxMenu.id, color)}
-                        className={cn(
-                          'w-6 h-6 rounded-full transition-all hover:scale-110',
-                          ctxMenu.data.color === color && 'ring-2 ring-ring ring-offset-1 ring-offset-popover'
-                        )}
-                        style={{ backgroundColor: color }}
-                      />
-                    ))}
+                  <div className="px-3 py-2">
+                    <ColorPicker
+                      value={ctxMenu.data.color}
+                      onChange={(c) => handleChangeColor(ctxMenu.id, c)}
+                      size="sm"
+                    />
                   </div>
                 )}
                 <CtxMenuItem
@@ -659,11 +656,23 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
 
             {/* Board-only actions */}
             {ctxMenu.type === 'board' && (
-              <CtxMenuItem
-                icon={Copy}
-                label="Copiar ID"
-                onClick={() => { navigator.clipboard.writeText(ctxMenu.id); toast.success('ID copiado'); setCtxMenu(null) }}
-              />
+              <>
+                <CtxMenuItem
+                  icon={Settings2}
+                  label="Configurar estados"
+                  onClick={() => { dispatch({ type: 'SHOW_STATUS_CONFIG', payload: true }); setCtxMenu(null) }}
+                />
+                <CtxMenuItem
+                  icon={Puzzle}
+                  label="Campos personalizados"
+                  onClick={() => { dispatch({ type: 'SHOW_CUSTOM_FIELDS', payload: true }); setCtxMenu(null) }}
+                />
+                <CtxMenuItem
+                  icon={Copy}
+                  label="Copiar ID"
+                  onClick={() => { navigator.clipboard.writeText(ctxMenu.id); toast.success('ID copiado'); setCtxMenu(null) }}
+                />
+              </>
             )}
           </div>
 

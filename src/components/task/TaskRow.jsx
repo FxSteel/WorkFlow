@@ -42,6 +42,63 @@ function usePortalDropdown() {
   return { open, setOpen, pos, updatePos, triggerRef, dropdownRef }
 }
 
+function CustomFieldDropdownCell({ cf, opts, selectedOpt, taskId, canEdit, setCustomFieldValue }) {
+  const dd = usePortalDropdown()
+
+  const handleSelect = async (optId) => {
+    await setCustomFieldValue(taskId, cf.id, 'dropdown', optId || null)
+    dd.setOpen(false)
+    toast.success(`${cf.name} actualizado`)
+  }
+
+  return (
+    <div className="px-2 py-2.5 flex items-center justify-center">
+      <button
+        ref={dd.triggerRef}
+        onClick={() => {
+          if (!canEdit) return
+          dd.updatePos('left', 160)
+          dd.setOpen(!dd.open)
+        }}
+        className={selectedOpt
+          ? "px-2 py-0.5 rounded-full text-[11px] font-medium text-white cursor-pointer hover:opacity-80 transition-opacity"
+          : "text-[11px] text-muted-foreground/40 hover:text-muted-foreground cursor-pointer"
+        }
+        style={selectedOpt ? { backgroundColor: selectedOpt.color } : undefined}
+      >
+        {selectedOpt ? selectedOpt.label : '—'}
+      </button>
+
+      {dd.open && createPortal(
+        <div
+          ref={dd.dropdownRef}
+          className="fixed z-[200] w-40 rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in"
+          style={{ top: dd.pos.top, left: dd.pos.left }}
+        >
+          <button
+            onClick={() => handleSelect(null)}
+            className="w-full px-2 py-1.5 text-left hover:bg-accent transition-colors text-xs text-muted-foreground"
+          >
+            Sin asignar
+          </button>
+          {opts.map(o => (
+            <button
+              key={o.id}
+              onClick={() => handleSelect(o.id)}
+              className="w-full px-2 py-1 text-left hover:bg-accent transition-colors flex items-center"
+            >
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white w-full text-center" style={{ backgroundColor: o.color }}>
+                {o.label}
+              </span>
+            </button>
+          ))}
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
 export default function TaskRow({ task, onDragStart, onDragEnd, isDragging, gridTemplate, customFields = [] }) {
   const { state, openTask } = useApp()
   const { user } = useAuth()
@@ -363,45 +420,45 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging, grid
           const opts = cf.custom_field_options || []
           const selectedOpt = opts.find(o => o.id === cfVal?.value_option_id)
           return (
+            <CustomFieldDropdownCell
+              key={cf.id}
+              cf={cf}
+              opts={opts}
+              selectedOpt={selectedOpt}
+              taskId={task.id}
+              canEdit={can('editTask')}
+              setCustomFieldValue={setCustomFieldValue}
+            />
+          )
+        }
+
+        if (cf.type === 'date') {
+          return (
             <div key={cf.id} className="px-2 py-2.5 flex items-center justify-center">
-              {selectedOpt ? (
-                <button
-                  onClick={async () => {
-                    if (!can('editTask')) return
-                    const currentIdx = opts.findIndex(o => o.id === selectedOpt.id)
-                    const nextIdx = (currentIdx + 1) % (opts.length + 1)
-                    const nextOpt = opts[nextIdx]
-                    await setCustomFieldValue(task.id, cf.id, 'dropdown', nextOpt?.id || null)
-                  }}
-                  className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white cursor-pointer hover:opacity-80 transition-opacity" style={{ backgroundColor: selectedOpt.color }}
-                >
-                  {selectedOpt.label}
-                </button>
-              ) : (
-                <button
-                  onClick={async () => {
-                    if (!can('editTask') || !opts.length) return
-                    await setCustomFieldValue(task.id, cf.id, 'dropdown', opts[0].id)
-                  }}
-                  className="text-[11px] text-muted-foreground/40 hover:text-muted-foreground cursor-pointer"
-                >
-                  —
-                </button>
-              )}
+              <DatePicker
+                value={cfVal?.value_date || ''}
+                onChange={async (val) => {
+                  if (!can('editTask')) return
+                  await setCustomFieldValue(task.id, cf.id, 'date', val || null)
+                  toast.success(`${cf.name} actualizado`)
+                }}
+                placeholder="Sin fecha"
+                size="sm"
+                className="border-0 bg-transparent hover:bg-accent text-[11px]"
+              />
             </div>
           )
         }
 
         const displayValue = cf.type === 'text' ? (cfVal?.value_text || '')
           : cf.type === 'number' ? (cfVal?.value_number ?? '')
-          : cf.type === 'date' ? (cfVal?.value_date || '')
           : cf.type === 'price' ? (cfVal?.value_price ?? '')
           : ''
 
         return (
           <div key={cf.id} className="px-2 py-2.5 flex items-center justify-center">
             <input
-              type={cf.type === 'number' || cf.type === 'price' ? 'number' : cf.type === 'date' ? 'date' : 'text'}
+              type={cf.type === 'number' || cf.type === 'price' ? 'number' : 'text'}
               defaultValue={displayValue}
               onBlur={async (e) => {
                 if (!can('editTask')) return

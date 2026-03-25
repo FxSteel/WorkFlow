@@ -18,17 +18,20 @@ import { toast } from 'sonner'
 import StatusConfigModal from './StatusConfigModal'
 import CustomFieldsConfigModal from './CustomFieldsConfigModal'
 import EmptyState from '../ui/EmptyState'
+import ColorPicker from '../ui/ColorPicker'
 
 export default function BoardView() {
-  const { state, openTaskModal } = useApp()
+  const { state, dispatch, openTaskModal } = useApp()
   const { fetchTasks, fetchSprints, fetchMembers, createTask, fetchBoardStatuses, initDefaultStatuses, fetchCustomFields, fetchCustomFieldValues } = useSupabase()
   const { can } = usePermissions()
   const [collapsedSprints, setCollapsedSprints] = useState({})
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [addingToSprint, setAddingToSprint] = useState(null)
   const [boardLoading, setBoardLoading] = useState(false)
-  const [showStatusConfig, setShowStatusConfig] = useState(false)
-  const [showCustomFields, setShowCustomFields] = useState(false)
+  const showStatusConfig = state.showStatusConfig
+  const showCustomFields = state.showCustomFields
+  const setShowStatusConfig = (v) => dispatch({ type: 'SHOW_STATUS_CONFIG', payload: v })
+  const setShowCustomFields = (v) => dispatch({ type: 'SHOW_CUSTOM_FIELDS', payload: v })
 
   // Views state per board (persisted in localStorage)
   const [activeViews, setActiveViews] = useState(['tabla'])
@@ -136,12 +139,10 @@ export default function BoardView() {
         onChangeView={handleChangeView}
         onAddView={handleAddView}
         onRemoveView={handleRemoveView}
-        onOpenStatusConfig={() => setShowStatusConfig(true)}
-        onOpenCustomFields={() => setShowCustomFields(true)}
       />
 
-      {/* Active View — relative container for empty state positioning */}
-      <div className="flex-1 relative min-h-0">
+      {/* Active View */}
+      <div className="flex-1 relative min-h-0 flex flex-col">
       {activeView === 'tabla' && (
         <TableView
           state={state}
@@ -174,7 +175,7 @@ function TableView({
 }) {
   const { updateSprint, deleteSprint, updateTask, setCustomFieldValue } = useSupabase()
   const customFields = state.customFields || []
-  const gridTemplate = `minmax(250px,2fr) 120px 110px 110px 100px 100px${customFields.map(() => ' 100px').join('')} 70px`
+  const gridTemplate = `minmax(250px,2fr) 120px 110px 110px 100px 100px${customFields.map(cf => ` ${Math.max(cf.name.length * 9 + 24, 120)}px`).join('')} 70px`
   const { can } = usePermissions()
   const [sprintMenu, setSprintMenu] = useState(null)
   const [editingSprint, setEditingSprint] = useState(null)
@@ -247,7 +248,7 @@ function TableView({
   }
 
   return (
-    <div className="flex-1 overflow-auto p-4">
+    <div className="flex-1 min-h-0 overflow-y-auto p-4">
       {state.sprints.map(sprint => {
         const sprintTasks = state.tasks.filter(t => t.sprint_id === sprint.id)
         const isCollapsed = collapsedSprints[sprint.id]
@@ -365,6 +366,14 @@ function TableView({
                         />
                       </div>
                     </div>
+                      <div className="px-3 py-1.5">
+                        <p className="text-[10px] text-muted-foreground mb-1.5">Color</p>
+                        <ColorPicker
+                          value={sprint.color || '#6c5ce7'}
+                          onChange={(c) => updateSprint(sprint.id, { color: c })}
+                          size="sm"
+                        />
+                      </div>
                     <div className="h-px bg-border mx-2 my-1" />
                     <div className="py-1">
                       <button
@@ -384,7 +393,8 @@ function TableView({
             </div>
 
             {!isCollapsed && (
-              <div className="rounded-lg border border-border overflow-hidden bg-card">
+              <div className="rounded-lg border border-border bg-card overflow-x-auto">
+                <div className="min-w-fit">
                 <div className="grid gap-0 bg-muted/50 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider" style={{ gridTemplateColumns: gridTemplate }}>
                   <div className="px-3 py-2">Tarea</div>
                   <div className="px-3 py-2 text-center">Responsable</div>
@@ -393,7 +403,7 @@ function TableView({
                   <div className="px-3 py-2 text-center">Prioridad</div>
                   <div className="px-3 py-2 text-center">Sprint</div>
                   {customFields.map(cf => (
-                    <div key={cf.id} className="px-3 py-2 text-center truncate" title={cf.name}>{cf.name}</div>
+                    <div key={cf.id} className="px-3 py-2 text-center whitespace-nowrap">{cf.name}</div>
                   ))}
                   <div className="px-3 py-2 text-center"></div>
                 </div>
@@ -410,6 +420,7 @@ function TableView({
                   />
                 ))}
 
+                </div>
                 {addingToSprint === sprint.id ? (
                   <div className="px-3 py-2 border-t border-border">
                     <input
@@ -469,14 +480,18 @@ function TableView({
             </span>
           </div>
           {!collapsedSprints._nosprint && (
-          <div className="rounded-lg border border-border overflow-hidden bg-card">
-            <div className="grid grid-cols-[minmax(250px,2fr)_120px_110px_110px_100px_100px_70px] gap-0 bg-muted/50 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          <div className="rounded-lg border border-border bg-card overflow-x-auto">
+            <div className="min-w-fit">
+            <div className="grid gap-0 bg-muted/50 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider" style={{ gridTemplateColumns: gridTemplate }}>
               <div className="px-3 py-2">Tarea</div>
               <div className="px-3 py-2 text-center">Responsable</div>
               <div className="px-3 py-2 text-center">Estado</div>
               <div className="px-3 py-2 text-center">Fecha</div>
               <div className="px-3 py-2 text-center">Prioridad</div>
               <div className="px-3 py-2 text-center">Sprint</div>
+              {customFields.map(cf => (
+                <div key={cf.id} className="px-3 py-2 text-center truncate" title={cf.name}>{cf.name}</div>
+              ))}
               <div className="px-3 py-2 text-center"></div>
             </div>
             {unassignedTasks.map(task => (
@@ -486,8 +501,11 @@ function TableView({
                 onDragStart={handleTaskDragStart}
                 onDragEnd={handleTaskDragEnd}
                 isDragging={draggedTask?.id === task.id}
+                gridTemplate={gridTemplate}
+                customFields={customFields}
               />
             ))}
+            </div>
             {addingToSprint === '_nosprint' ? (
               <div className="px-3 py-2 border-t border-border">
                 <input

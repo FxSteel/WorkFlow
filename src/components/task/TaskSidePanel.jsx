@@ -26,6 +26,7 @@ export default function TaskSidePanel() {
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [pendingCFValues, setPendingCFValues] = useState({})
 
   const assignableUsers = useMemo(() => {
     return state.orgMembers.map(m => ({
@@ -45,6 +46,10 @@ export default function TaskSidePanel() {
   }, [task?.id])
 
   if (!state.isSidePanelOpen || !task) return null
+
+  const savePendingCF = (fieldId, fieldType, value) => {
+    setPendingCFValues(prev => ({ ...prev, [fieldId]: { fieldType, value } }))
+  }
 
   const sprint = state.sprints.find(s => s.id === task.sprint_id)
   const assignee = assignableUsers.find(u => u.id === task.assignee_id)
@@ -83,7 +88,7 @@ export default function TaskSidePanel() {
 
   const handleCreate = async () => {
     if (!title.trim()) return
-    await createTask({
+    const { data: newTask } = await createTask({
       title: title.trim(),
       description,
       status: task.status || 'Por hacer',
@@ -96,6 +101,14 @@ export default function TaskSidePanel() {
       board_id: state.currentBoard.id,
       position: state.tasks.length,
     })
+    // Save pending custom field values
+    if (newTask?.id && Object.keys(pendingCFValues).length > 0) {
+      await Promise.all(
+        Object.entries(pendingCFValues).map(([fieldId, { fieldType, value }]) =>
+          setCustomFieldValue(newTask.id, fieldId, fieldType, value)
+        )
+      )
+    }
     toast.success('Tarea creada')
     closeSidePanel()
   }
@@ -275,18 +288,22 @@ export default function TaskSidePanel() {
           {(state.customFields || []).map(cf => {
             const values = state.customFieldValues?.[task.id] || []
             const cfVal = values.find(v => v.custom_field_id === cf.id)
+            const pending = pendingCFValues[cf.id]
             const CFIcon = cf.type === 'number' ? Hash : cf.type === 'date' ? Calendar : cf.type === 'price' ? DollarSign : cf.type === 'dropdown' ? ChevronDown : Type
 
             if (cf.type === 'dropdown') {
               const opts = cf.custom_field_options || []
-              const selectedOpt = opts.find(o => o.id === cfVal?.value_option_id)
+              const currentVal = pending ? pending.value : cfVal?.value_option_id
+              const selectedOpt = opts.find(o => o.id === currentVal)
               return (
                 <PropRow key={cf.id} icon={CFIcon} label={cf.name}>
                   <Select
-                    value={cfVal?.value_option_id || '_none'}
+                    key={`${cf.id}-${currentVal || 'none'}`}
+                    value={currentVal || '_none'}
                     onValueChange={async (val) => {
-                      if (isNew) return
-                      await setCustomFieldValue(task.id, cf.id, 'dropdown', val === '_none' ? null : val)
+                      const v = val === '_none' ? null : val
+                      if (isNew) { savePendingCF(cf.id, 'dropdown', v); return }
+                      await setCustomFieldValue(task.id, cf.id, 'dropdown', v)
                     }}
                   >
                     <SelectTrigger className="border-0 bg-transparent h-7 px-1 text-sm hover:bg-accent w-auto">
@@ -313,12 +330,13 @@ export default function TaskSidePanel() {
             }
 
             if (cf.type === 'date') {
+              const dateVal = pending ? pending.value : cfVal?.value_date
               return (
                 <PropRow key={cf.id} icon={CFIcon} label={cf.name}>
                   <DatePicker
-                    value={cfVal?.value_date || ''}
+                    value={dateVal || ''}
                     onChange={async (val) => {
-                      if (isNew) return
+                      if (isNew) { savePendingCF(cf.id, 'date', val || null); return }
                       await setCustomFieldValue(task.id, cf.id, 'date', val || null)
                     }}
                     placeholder="Vacío"
@@ -329,10 +347,12 @@ export default function TaskSidePanel() {
               )
             }
 
-            const displayValue = cf.type === 'text' ? (cfVal?.value_text || '')
+            const rawValue = pending ? pending.value
+              : cf.type === 'text' ? (cfVal?.value_text || '')
               : cf.type === 'number' ? (cfVal?.value_number ?? '')
               : cf.type === 'price' ? (cfVal?.value_price ?? '')
               : ''
+            const displayValue = rawValue
             const hasValue = displayValue !== '' && displayValue !== null
 
             return (
@@ -342,8 +362,9 @@ export default function TaskSidePanel() {
                   defaultValue={displayValue}
                   hasValue={hasValue}
                   onSave={async (val) => {
-                    if (isNew) return
-                    await setCustomFieldValue(task.id, cf.id, cf.type, cf.type === 'number' || cf.type === 'price' ? (val ? Number(val) : null) : (val || null))
+                    const v = cf.type === 'number' || cf.type === 'price' ? (val ? Number(val) : null) : (val || null)
+                    if (isNew) { savePendingCF(cf.id, cf.type, v); return }
+                    await setCustomFieldValue(task.id, cf.id, cf.type, v)
                   }}
                 />
               </PropRow>
