@@ -156,7 +156,7 @@ export default function SearchModal({ isOpen, onClose }) {
           )}
 
           {showEmpty && (
-            <EmptyState title="Sin resultados" description={`No se encontraron resultados para "${query}"`} compact />
+            <EmptyState title="Sin resultados" description={`No se encontraron resultados para "${query}"`} compact soft />
           )}
 
           {!loading && hasResults && (
@@ -272,7 +272,7 @@ export default function SearchModal({ isOpen, onClose }) {
           )}
 
           {!query.trim() && !loading && (
-            <EmptyState title="Buscar en WorkFlow" description="Busca tableros, tareas y espacios de trabajo." compact />
+            <EmptyState title="Buscar en WorkFlow" description="Busca tableros, tareas y espacios de trabajo." compact soft />
           )}
         </div>
 

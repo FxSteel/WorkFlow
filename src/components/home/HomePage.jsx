@@ -7,7 +7,6 @@ import {
   Flag,
   Zap,
   ArrowRight,
-  LayoutDashboard,
   AlertCircle,
   CheckCircle2,
   Timer,
@@ -208,7 +207,7 @@ export default function HomePage() {
                     <div className="p-3 flex flex-col justify-between h-[calc(100%-6px)] bg-card">
                       <div className="flex items-start gap-2">
                         <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                          <LayoutDashboard className="w-4 h-4 text-muted-foreground" />
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg>
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-foreground truncate text-left">
@@ -283,7 +282,7 @@ export default function HomePage() {
                         <p className="text-foreground truncate font-medium text-[13px] hover:text-primary transition-colors">{task.title}</p>
                         {boardName && (
                           <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
-                            <LayoutDashboard className="w-3 h-3 shrink-0" />
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg>
                             {boardName}
                           </p>
                         )}
@@ -338,7 +337,7 @@ export default function HomePage() {
                 </div>
               </div>
             ) : upcomingTasks.length === 0 ? (
-              <EmptyState compact title="Todo al día" description="No hay tareas pendientes con fecha próxima. Crea nuevas tareas desde un tablero." />
+              <EmptyState compact soft title="Todo al día" description="No hay tareas pendientes con fecha próxima. Crea nuevas tareas desde un tablero." />
             ) : (
               <>
                 {/* Table header */}
@@ -377,7 +376,7 @@ export default function HomePage() {
                           <p className="text-foreground truncate font-medium text-[13px] hover:text-primary transition-colors">{task.title}</p>
                           {boardName && (
                             <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
-                              <LayoutDashboard className="w-3 h-3 shrink-0" />
+                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg>
                               {boardName}
                             </p>
                           )}

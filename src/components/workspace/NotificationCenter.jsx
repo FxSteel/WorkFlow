@@ -236,6 +236,7 @@ export default function NotificationCenter() {
                     title={activeTab === 'unread' ? 'Sin notificaciones nuevas' : 'Sin notificaciones'}
                     description="Aqui veran menciones, asignaciones y actualizaciones."
                     compact
+                    soft
                   />
                 )}
 

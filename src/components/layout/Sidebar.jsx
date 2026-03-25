@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
-  LayoutDashboard,
   Plus,
   ChevronDown,
   ChevronRight,
@@ -547,7 +546,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
                             className="flex-1 flex items-center gap-2 min-w-0"
                             onClick={() => selectBoard(board)}
                           >
-                            <LayoutDashboard className="w-3.5 h-3.5 shrink-0" />
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg>
                             <span className="truncate">{board.name}</span>
                           </div>
                           <button
@@ -615,7 +614,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
                 {ctxMenu.data.name?.[0]?.toUpperCase()}
               </div>
             ) : (
-              <LayoutDashboard className="w-4 h-4 text-muted-foreground shrink-0" />
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground shrink-0"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg>
             )}
             <span className="text-xs font-semibold text-foreground truncate">{ctxMenu.data.name}</span>
           </div>

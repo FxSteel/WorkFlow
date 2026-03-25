@@ -213,13 +213,13 @@ function TableView({
 
   const gridTemplate = [
     'minmax(250px,2fr)',
-    isColVisible('assignee') ? '120px' : '0px',
-    isColVisible('status') ? '110px' : '0px',
-    isColVisible('due_date') ? '110px' : '0px',
+    isColVisible('assignee') ? '150px' : '0px',
+    isColVisible('status') ? '120px' : '0px',
+    isColVisible('due_date') ? '120px' : '0px',
     isColVisible('priority') ? '100px' : '0px',
-    isColVisible('sprint') ? '100px' : '0px',
-    ...customFields.map(cf => isColVisible(`cf_${cf.id}`) ? `${Math.max(cf.name.length * 9 + 24, 120)}px` : '0px'),
-    '70px',
+    isColVisible('sprint') ? '150px' : '0px',
+    ...customFields.map(cf => isColVisible(`cf_${cf.id}`) ? `${Math.max(cf.name.length * 9 + 24, 140)}px` : '0px'),
+    '50px',
   ].join(' ')
   const { can } = usePermissions()
   const [sprintMenu, setSprintMenu] = useState(null)

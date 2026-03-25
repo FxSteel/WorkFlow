@@ -235,7 +235,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
                       {task.assignee_name[0]?.toUpperCase()}
                     </div>
                   )}
-                  <span className="text-xs truncate max-w-[70px]">{task.assignee_name}</span>
+                  <span className="text-xs whitespace-nowrap">{task.assignee_name}</span>
                 </>
               )
             })()
@@ -247,7 +247,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
         {assignee.open && createPortal(
           <div
             ref={assignee.dropdownRef}
-            className="fixed z-[200] w-44 rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in"
+            className="fixed z-[200] min-w-[180px] rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in"
             style={{ top: assignee.pos.top, left: assignee.pos.left }}
           >
             <button
@@ -262,7 +262,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
                 key={u.id}
                 onClick={() => handleAssigneeChange(u.id, u.name)}
                 className={cn(
-                  'w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2',
+                  'w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2 whitespace-nowrap',
                   task.assignee_id === u.id && 'bg-accent/50'
                 )}
               >
@@ -375,7 +375,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
         <button
           ref={sprint.triggerRef}
           onClick={() => { if (!can('editTask')) return; sprint.updatePos('left', 140); sprint.setOpen(!sprint.open) }}
-          className="px-2 py-0.5 rounded text-[11px] font-medium text-muted-foreground hover:bg-accent truncate max-w-[100px] transition-colors flex items-center gap-1.5"
+          className="px-2 py-0.5 rounded text-[11px] font-medium text-muted-foreground hover:bg-accent transition-colors flex items-center gap-1.5 whitespace-nowrap"
         >
           <div
             className="w-2 h-2 rounded-full shrink-0"
@@ -387,21 +387,21 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
         {sprint.open && createPortal(
           <div
             ref={sprint.dropdownRef}
-            className="fixed z-[200] w-36 rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in"
+            className="fixed z-[200] min-w-[160px] rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in"
             style={{ top: sprint.pos.top, left: sprint.pos.left }}
           >
             <button
               onClick={() => handleSprintChange(null)}
-              className={cn('w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2', !task.sprint_id && 'bg-accent/50')}
+              className={cn('w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2 whitespace-nowrap', !task.sprint_id && 'bg-accent/50')}
             >
-              <div className="w-2 h-2 rounded-full bg-gray-400" />
+              <div className="w-2 h-2 rounded-full bg-gray-400 shrink-0" />
               Sin asignar
             </button>
             {state.sprints.map(s => (
               <button
                 key={s.id}
                 onClick={() => handleSprintChange(s.id)}
-                className={cn('w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2', task.sprint_id === s.id && 'bg-accent/50')}
+                className={cn('w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2 whitespace-nowrap', task.sprint_id === s.id && 'bg-accent/50')}
               >
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color || '#6c5ce7' }} />
                 {s.name}
