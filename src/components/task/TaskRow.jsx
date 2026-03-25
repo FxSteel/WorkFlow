@@ -99,7 +99,7 @@ function CustomFieldDropdownCell({ cf, opts, selectedOpt, taskId, canEdit, setCu
   )
 }
 
-export default function TaskRow({ task, onDragStart, onDragEnd, isDragging, gridTemplate, customFields = [], isColVisible = () => true }) {
+export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDragging, gridTemplate, customFields = [], isColVisible = () => true }) {
   const { state, openTask } = useApp()
   const { user } = useAuth()
   const { updateTask, deleteTask, createTask, setCustomFieldValue } = useSupabase()
@@ -195,6 +195,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, isDragging, grid
         onDragStart?.(task)
       }}
       onDragEnd={() => onDragEnd?.()}
+      onDragOver={(e) => onDragOver?.(e)}
       className={cn(
         'grid gap-0 border-b border-border last:border-b-0 hover:bg-accent/30 transition-all group text-sm',
         isDragging && 'opacity-40 scale-[0.98] bg-accent/20'

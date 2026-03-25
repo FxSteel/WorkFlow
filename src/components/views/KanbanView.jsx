@@ -7,7 +7,7 @@ import { PRIORITY_CONFIG } from '../../lib/constants'
 import EmptyState from '../ui/EmptyState'
 
 export default function KanbanView({ isColVisible = () => true }) {
-  const { state, openTask } = useApp()
+  const { state, dispatch, openTask } = useApp()
   const { updateTask, createTask } = useSupabase()
   const [addingTo, setAddingTo] = useState(null)
   const [newTitle, setNewTitle] = useState('')
@@ -65,15 +65,56 @@ export default function KanbanView({ isColVisible = () => true }) {
     e.dataTransfer.dropEffect = 'move'
   }
 
-  const handleCardDragOver = (e, index) => {
+  const handleCardDragOver = (e, index, status) => {
     e.preventDefault()
-    setDragOverIndex(index)
+    e.stopPropagation()
+    const rect = e.currentTarget.getBoundingClientRect()
+    const midY = rect.top + rect.height / 2
+    const insertIdx = e.clientY < midY ? index : index + 1
+    setDragOverIndex(insertIdx)
+    setDragOverCol(status)
   }
 
   const handleDrop = async (e, status) => {
     e.preventDefault()
-    if (draggedTask && draggedTask.status !== status) {
-      await updateTask(draggedTask.id, { status })
+    if (!draggedTask) return handleDragEnd()
+
+    const columnTasks = state.tasks
+      .filter(t => t.status === status)
+      .sort((a, b) => (a.position || 0) - (b.position || 0))
+
+    const isSameCol = draggedTask.status === status
+    const targetIdx = dragOverIndex !== null ? dragOverIndex : columnTasks.length
+
+    if (isSameCol) {
+      // Reorder within same column
+      const oldIdx = columnTasks.findIndex(t => t.id === draggedTask.id)
+      if (oldIdx === targetIdx || oldIdx === targetIdx - 1) return handleDragEnd()
+
+      const reordered = columnTasks.filter(t => t.id !== draggedTask.id)
+      const adjustedIdx = targetIdx > oldIdx ? targetIdx - 1 : targetIdx
+      reordered.splice(adjustedIdx, 0, draggedTask)
+
+      // Optimistic update
+      const updates = reordered.map((t, i) => ({ id: t.id, position: i }))
+      updates.forEach(u => {
+        dispatch({ type: 'UPDATE_TASK', payload: u })
+      })
+      // Save to DB
+      await Promise.all(updates.map(u => updateTask(u.id, { position: u.position })))
+    } else {
+      // Move to different column
+      const adjustedIdx = targetIdx !== null ? targetIdx : columnTasks.length
+      // Update position of tasks after insert point
+      const updates = []
+      columnTasks.forEach((t, i) => {
+        if (i >= adjustedIdx) updates.push({ id: t.id, position: i + 1 })
+      })
+      updates.forEach(u => dispatch({ type: 'UPDATE_TASK', payload: u }))
+      dispatch({ type: 'UPDATE_TASK', payload: { id: draggedTask.id, status, position: adjustedIdx } })
+
+      await updateTask(draggedTask.id, { status, position: adjustedIdx })
+      await Promise.all(updates.map(u => updateTask(u.id, { position: u.position })))
     }
     handleDragEnd()
   }
@@ -87,8 +128,10 @@ export default function KanbanView({ isColVisible = () => true }) {
     <div className="flex-1 min-h-0 overflow-auto p-4">
       <div className="flex gap-4 min-w-max">
         {(state.boardStatuses || []).map(col => {
-          const columnTasks = state.tasks.filter(t => t.status === col.name)
-          const isOver = dragOverCol === col.name && draggedTask?.status !== col.name
+          const columnTasks = state.tasks
+            .filter(t => t.status === col.name)
+            .sort((a, b) => (a.position || 0) - (b.position || 0))
+          const isOver = dragOverCol === col.name && draggedTask
 
           return (
             <div
@@ -121,14 +164,18 @@ export default function KanbanView({ isColVisible = () => true }) {
                 {columnTasks.map((task, index) => {
                   const priority = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium
                   const isDragging = draggedTask?.id === task.id
+                  const showDropBefore = isOver && dragOverIndex === index && draggedTask?.id !== task.id
 
                   return (
+                    <div key={task.id}>
+                      {showDropBefore && (
+                        <div className="h-1 bg-primary/50 rounded-full mx-1 mb-1 animate-pulse" />
+                      )}
                     <div
-                      key={task.id}
                       draggable
                       onDragStart={(e) => handleDragStart(e, task)}
                       onDragEnd={handleDragEnd}
-                      onDragOver={(e) => handleCardDragOver(e, index)}
+                      onDragOver={(e) => handleCardDragOver(e, index, col.name)}
                       onClick={() => openTask(task)}
                       className={cn(
                         'bg-card border border-border rounded-lg p-3 cursor-grab active:cursor-grabbing transition-all group',
@@ -204,8 +251,13 @@ export default function KanbanView({ isColVisible = () => true }) {
                         </div>
                       )}
                     </div>
+                    </div>
                   )
                 })}
+                {/* Drop indicator at end of column */}
+                {isOver && dragOverIndex === columnTasks.length && (
+                  <div className="h-1 bg-primary/50 rounded-full mx-1 animate-pulse" />
+                )}
 
                 {/* Drop indicator when column is empty and being dragged over */}
                 {isOver && columnTasks.length === 0 && (

@@ -206,6 +206,7 @@ function TableView({
   newTaskTitle, setNewTaskTitle, handleQuickAddTask,
   isColVisible,
 }) {
+  const { dispatch } = useApp()
   const { updateSprint, deleteSprint, updateTask, setCustomFieldValue } = useSupabase()
   const customFields = state.customFields || []
   const visibleCF = customFields.filter(cf => isColVisible(`cf_${cf.id}`))
@@ -227,6 +228,8 @@ function TableView({
   const [deleteSprintConfirm, setDeleteSprintConfirm] = useState(null)
   const [draggedTask, setDraggedTask] = useState(null)
   const [dragOverSprint, setDragOverSprint] = useState(null)
+  const [dragOverIndex, setDragOverIndex] = useState(null)
+  const [dragOverSprintKey, setDragOverSprintKey] = useState(null)
   const dragCounters = useRef({})
   const menuRef = useRef(null)
 
@@ -234,6 +237,8 @@ function TableView({
   const handleTaskDragEnd = () => {
     setDraggedTask(null)
     setDragOverSprint(null)
+    setDragOverIndex(null)
+    setDragOverSprintKey(null)
     dragCounters.current = {}
   }
 
@@ -250,10 +255,42 @@ function TableView({
       if (dragOverSprint === key) setDragOverSprint(null)
     }
   }
+  const handleRowDragOver = (e, index, sprintKey) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const rect = e.currentTarget.getBoundingClientRect()
+    const midY = rect.top + rect.height / 2
+    const insertIdx = e.clientY < midY ? index : index + 1
+    setDragOverIndex(insertIdx)
+    setDragOverSprintKey(sprintKey)
+  }
   const handleSprintDrop = async (e, sprintId) => {
     e.preventDefault()
-    if (draggedTask && draggedTask.sprint_id !== sprintId) {
-      await updateTask(draggedTask.id, { sprint_id: sprintId })
+    if (!draggedTask) return handleTaskDragEnd()
+
+    const sprintKey = sprintId || '_nosprint'
+    const sprintTasks = state.tasks
+      .filter(t => sprintId ? t.sprint_id === sprintId : !t.sprint_id)
+      .sort((a, b) => (a.position || 0) - (b.position || 0))
+
+    const isSameSprint = sprintId ? draggedTask.sprint_id === sprintId : !draggedTask.sprint_id
+    const targetIdx = (dragOverSprintKey === sprintKey && dragOverIndex !== null) ? dragOverIndex : sprintTasks.length
+
+    if (isSameSprint) {
+      const oldIdx = sprintTasks.findIndex(t => t.id === draggedTask.id)
+      if (oldIdx === targetIdx || oldIdx === targetIdx - 1) return handleTaskDragEnd()
+
+      const reordered = sprintTasks.filter(t => t.id !== draggedTask.id)
+      const adjustedIdx = targetIdx > oldIdx ? targetIdx - 1 : targetIdx
+      reordered.splice(adjustedIdx, 0, draggedTask)
+
+      const updates = reordered.map((t, i) => ({ id: t.id, position: i }))
+      updates.forEach(u => dispatch({ type: 'UPDATE_TASK', payload: u }))
+      await Promise.all(updates.map(u => updateTask(u.id, { position: u.position })))
+    } else {
+      const adjustedIdx = targetIdx !== null ? targetIdx : sprintTasks.length
+      dispatch({ type: 'UPDATE_TASK', payload: { id: draggedTask.id, sprint_id: sprintId, position: adjustedIdx } })
+      await updateTask(draggedTask.id, { sprint_id: sprintId, position: adjustedIdx })
     }
     handleTaskDragEnd()
   }
@@ -285,7 +322,7 @@ function TableView({
     await updateSprint(sprintId, { [field]: value || null })
   }
 
-  const unassignedTasks = state.tasks.filter(t => !t.sprint_id)
+  const unassignedTasks = state.tasks.filter(t => !t.sprint_id).sort((a, b) => (a.position || 0) - (b.position || 0))
 
   if (state.sprints.length === 0 && state.tasks.length === 0) {
     return <EmptyState title="Sin tareas" description="Crea tu primera tarea o sprint para comenzar a organizar tu trabajo." />
@@ -294,7 +331,7 @@ function TableView({
   return (
     <div className="flex-1 min-h-0 overflow-y-auto p-4">
       {state.sprints.map(sprint => {
-        const sprintTasks = state.tasks.filter(t => t.sprint_id === sprint.id)
+        const sprintTasks = state.tasks.filter(t => t.sprint_id === sprint.id).sort((a, b) => (a.position || 0) - (b.position || 0))
         const isCollapsed = collapsedSprints[sprint.id]
         const completedCount = sprintTasks.filter(t => t.status === 'Completado').length
         const progress = sprintTasks.length > 0 ? (completedCount / sprintTasks.length) * 100 : 0
@@ -452,18 +489,26 @@ function TableView({
                   <div className="px-3 py-2 text-center"></div>
                 </div>
 
-                {sprintTasks.map(task => (
-                  <TaskRow
-                    key={task.id}
-                    task={task}
-                    onDragStart={handleTaskDragStart}
-                    onDragEnd={handleTaskDragEnd}
-                    isDragging={draggedTask?.id === task.id}
-                    gridTemplate={gridTemplate}
-                    customFields={customFields}
-                    isColVisible={isColVisible}
-                  />
+                {sprintTasks.map((task, idx) => (
+                  <div key={task.id}>
+                    {draggedTask && dragOverSprintKey === sprint.id && dragOverIndex === idx && draggedTask.id !== task.id && (
+                      <div className="h-0.5 bg-primary/60 mx-2" />
+                    )}
+                    <TaskRow
+                      task={task}
+                      onDragStart={handleTaskDragStart}
+                      onDragEnd={handleTaskDragEnd}
+                      onDragOver={(e) => handleRowDragOver(e, idx, sprint.id)}
+                      isDragging={draggedTask?.id === task.id}
+                      gridTemplate={gridTemplate}
+                      customFields={customFields}
+                      isColVisible={isColVisible}
+                    />
+                  </div>
                 ))}
+                {draggedTask && dragOverSprintKey === sprint.id && dragOverIndex === sprintTasks.length && (
+                  <div className="h-0.5 bg-primary/60 mx-2" />
+                )}
 
                 </div>
                 {addingToSprint === sprint.id ? (
@@ -539,18 +584,26 @@ function TableView({
               ))}
               <div className="px-3 py-2 text-center"></div>
             </div>
-            {unassignedTasks.map(task => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                onDragStart={handleTaskDragStart}
-                onDragEnd={handleTaskDragEnd}
-                isDragging={draggedTask?.id === task.id}
-                gridTemplate={gridTemplate}
-                customFields={customFields}
-                isColVisible={isColVisible}
-              />
+            {unassignedTasks.map((task, idx) => (
+              <div key={task.id}>
+                {draggedTask && dragOverSprintKey === '_nosprint' && dragOverIndex === idx && draggedTask.id !== task.id && (
+                  <div className="h-0.5 bg-primary/60 mx-2" />
+                )}
+                <TaskRow
+                  task={task}
+                  onDragStart={handleTaskDragStart}
+                  onDragEnd={handleTaskDragEnd}
+                  onDragOver={(e) => handleRowDragOver(e, idx, '_nosprint')}
+                  isDragging={draggedTask?.id === task.id}
+                  gridTemplate={gridTemplate}
+                  customFields={customFields}
+                  isColVisible={isColVisible}
+                />
+              </div>
             ))}
+            {draggedTask && dragOverSprintKey === '_nosprint' && dragOverIndex === unassignedTasks.length && (
+              <div className="h-0.5 bg-primary/60 mx-2" />
+            )}
             </div>
             {addingToSprint === '_nosprint' ? (
               <div className="px-3 py-2 border-t border-border">
