@@ -39,12 +39,27 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
     createWorkspace, createBoard, deleteWorkspace, updateWorkspace, fetchBoards,
     deleteBoard, updateBoard, createOrganization, updateOrganization, deleteOrganization, fetchWorkspaces,
   } = useSupabase()
-  const [expandedWorkspaces, setExpandedWorkspaces] = useState({})
+  const [expandedWorkspaces, setExpandedWorkspaces] = useState(() => {
+    // Auto-expand workspace containing the saved board on initial load
+    const savedBoardId = localStorage.getItem('workflow-current-board')
+    if (savedBoardId) {
+      const savedWsId = localStorage.getItem('workflow-current-ws')
+      if (savedWsId) return { [savedWsId]: true }
+    }
+    return {}
+  })
   const [newWorkspaceName, setNewWorkspaceName] = useState('')
   const [showNewWorkspace, setShowNewWorkspace] = useState(false)
   const [newBoardName, setNewBoardName] = useState('')
   const [showNewBoard, setShowNewBoard] = useState(null)
   const [showOrgDropdown, setShowOrgDropdown] = useState(false)
+
+  // Auto-expand workspace when a board is selected
+  useEffect(() => {
+    if (state.currentBoard?.workspace_id) {
+      setExpandedWorkspaces(prev => ({ ...prev, [state.currentBoard.workspace_id]: true }))
+    }
+  }, [state.currentBoard?.id])
   const [showNewOrg, setShowNewOrg] = useState(false)
   const [newOrgName, setNewOrgName] = useState('')
   const [editingOrgId, setEditingOrgId] = useState(null)

@@ -4,11 +4,12 @@ import { useApp } from '../../context/AppContext'
 import { cn } from '../../lib/utils'
 import { STATUS_COLORS } from '../../lib/constants'
 
-export default function GanttView() {
+export default function GanttView({ filteredTasks }) {
   const { state, openTask } = useApp()
+  const allTasks = filteredTasks || state.tasks
 
   const { tasks, startDate, totalDays, dayWidth } = useMemo(() => {
-    const tasksWithDates = state.tasks.filter(t => t.due_date)
+    const tasksWithDates = allTasks.filter(t => t.due_date)
     if (tasksWithDates.length === 0) {
       return { tasks: [], startDate: new Date(), totalDays: 30, dayWidth: 40 }
     }
@@ -23,7 +24,7 @@ export default function GanttView() {
     const total = Math.max(Math.ceil((max - min) / (1000 * 60 * 60 * 24)), 14)
 
     return { tasks: tasksWithDates, startDate: min, totalDays: total, dayWidth: 40 }
-  }, [state.tasks])
+  }, [allTasks])
 
   const getDayOffset = (dateStr) => {
     const date = new Date(dateStr + 'T00:00:00')

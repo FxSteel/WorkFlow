@@ -9,8 +9,9 @@ import { toast } from 'sonner'
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
-export default function CalendarView() {
+export default function CalendarView({ filteredTasks }) {
   const { state, openTask, dispatch } = useApp()
+  const tasks = filteredTasks || tasks
   const { updateTask } = useSupabase()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [draggedTask, setDraggedTask] = useState(null)
@@ -49,7 +50,7 @@ export default function CalendarView() {
 
   const tasksByDate = useMemo(() => {
     const map = {}
-    state.tasks.forEach(task => {
+    tasks.forEach(task => {
       if (task.due_date) {
         const key = task.due_date
         if (!map[key]) map[key] = []
@@ -57,7 +58,7 @@ export default function CalendarView() {
       }
     })
     return map
-  }, [state.tasks])
+  }, [tasks])
 
   const today = new Date()
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`

@@ -143,13 +143,19 @@ export default function TaskSidePanel() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
         {/* Title */}
-        <input
+        <textarea
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => {
+            setTitle(e.target.value)
+            e.target.style.height = 'auto'
+            e.target.style.height = e.target.scrollHeight + 'px'
+          }}
           onBlur={handleTitleBlur}
-          onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur() }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) e.target.blur() }}
           placeholder="Sin título"
-          className="w-full text-2xl font-bold bg-transparent text-foreground border-0 focus:outline-none placeholder:text-muted-foreground/40 mb-5"
+          rows={1}
+          ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' } }}
+          className="w-full text-2xl font-bold bg-transparent text-foreground border-0 focus:outline-none placeholder:text-muted-foreground/40 mb-5 resize-none overflow-hidden leading-tight"
         />
 
         {/* Properties */}

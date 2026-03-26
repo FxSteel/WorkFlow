@@ -6,8 +6,9 @@ import { cn } from '../../lib/utils'
 import { PRIORITY_CONFIG } from '../../lib/constants'
 import EmptyState from '../ui/EmptyState'
 
-export default function KanbanView({ isColVisible = () => true }) {
+export default function KanbanView({ isColVisible = () => true, filteredTasks }) {
   const { state, dispatch, openTask } = useApp()
+  const tasks = filteredTasks || tasks
   const { updateTask, createTask } = useSupabase()
   const [addingTo, setAddingTo] = useState(null)
   const [newTitle, setNewTitle] = useState('')
@@ -24,7 +25,7 @@ export default function KanbanView({ isColVisible = () => true }) {
       sprint_id: state.sprints.length > 0 ? state.sprints[0].id : null,
       status,
       priority: 'medium',
-      position: state.tasks.filter(t => t.status === status).length,
+      position: tasks.filter(t => t.status === status).length,
     })
     setNewTitle('')
     setAddingTo(null)
@@ -79,7 +80,7 @@ export default function KanbanView({ isColVisible = () => true }) {
     e.preventDefault()
     if (!draggedTask) return handleDragEnd()
 
-    const columnTasks = state.tasks
+    const columnTasks = tasks
       .filter(t => t.status === status)
       .sort((a, b) => (a.position || 0) - (b.position || 0))
 
@@ -119,7 +120,7 @@ export default function KanbanView({ isColVisible = () => true }) {
     handleDragEnd()
   }
 
-  if (state.tasks.length === 0) {
+  if (tasks.length === 0) {
     return <EmptyState title="Sin tareas" description="Crea tu primera tarea para verla en el tablero Kanban." />
   }
 
@@ -128,7 +129,7 @@ export default function KanbanView({ isColVisible = () => true }) {
     <div className="flex-1 min-h-0 overflow-auto p-4">
       <div className="flex gap-4 min-w-max">
         {(state.boardStatuses || []).map(col => {
-          const columnTasks = state.tasks
+          const columnTasks = tasks
             .filter(t => t.status === col.name)
             .sort((a, b) => (a.position || 0) - (b.position || 0))
           const isOver = dragOverCol === col.name && draggedTask

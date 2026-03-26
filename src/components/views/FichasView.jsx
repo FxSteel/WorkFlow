@@ -3,13 +3,14 @@ import EmptyState from '../ui/EmptyState'
 import { cn } from '../../lib/utils'
 import { STATUS_COLORS, PRIORITY_CONFIG } from '../../lib/constants'
 
-export default function FichasView({ isColVisible = () => true }) {
+export default function FichasView({ isColVisible = () => true, filteredTasks }) {
   const { state, openTask, openTaskModal } = useApp()
+  const tasks = filteredTasks || tasks
 
   return (
     <div className="flex-1 min-h-0 overflow-auto p-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-        {state.tasks.map(task => {
+        {tasks.map(task => {
           const priority = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium
           const sprint = state.sprints.find(s => s.id === task.sprint_id)
           return (
@@ -87,7 +88,7 @@ export default function FichasView({ isColVisible = () => true }) {
           )
         })}
 
-        {state.tasks.length === 0 && (
+        {tasks.length === 0 && (
           <EmptyState title="Sin tareas" description="Crea tu primera tarea para comenzar a organizar tu trabajo." />
         )}
       </div>

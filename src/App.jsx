@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { ThemeProvider } from './context/ThemeContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { AppProvider, useApp } from './context/AppContext'
@@ -58,22 +58,61 @@ function AppContent() {
     }
   }, [state.organizations])
 
+  // Track previous org to detect real org changes vs initial load
+  const prevOrgRef = useRef(null)
+
   // When org changes, fetch its workspaces and members
   useEffect(() => {
     if (state.currentOrg) {
+      const isOrgSwitch = prevOrgRef.current && prevOrgRef.current !== state.currentOrg.id
+      prevOrgRef.current = state.currentOrg.id
       localStorage.setItem('workflow-current-org', state.currentOrg.id)
       fetchWorkspaces(state.currentOrg.id)
       fetchOrgMembers(state.currentOrg.id)
-      // Reset board selection when org changes
-      dispatch({ type: 'SET_CURRENT_BOARD', payload: null })
-      dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: null })
+      // Only reset board/workspace on real org switch, not on initial load
+      if (isOrgSwitch) {
+        localStorage.removeItem('workflow-current-ws')
+        localStorage.removeItem('workflow-current-board')
+        dispatch({ type: 'SET_CURRENT_BOARD', payload: null })
+        dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: null })
+      }
     }
   }, [state.currentOrg?.id])
 
-  // Fetch boards for all workspaces when workspaces load
+  // Fetch boards for all workspaces when workspaces load, then restore saved board
   useEffect(() => {
-    state.workspaces.forEach(ws => fetchBoards(ws.id))
+    if (state.workspaces.length === 0) return
+    const fetchAllBoards = async () => {
+      for (const ws of state.workspaces) {
+        await fetchBoards(ws.id)
+      }
+      // After all boards are fetched, restore saved workspace
+      const savedWsId = localStorage.getItem('workflow-current-ws')
+      if (savedWsId && !state.currentWorkspace) {
+        const ws = state.workspaces.find(w => w.id === savedWsId)
+        if (ws) dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: ws })
+      }
+    }
+    fetchAllBoards()
   }, [state.workspaces])
+
+  // Restore saved board when boards are loaded
+  useEffect(() => {
+    if (state.boards.length > 0 && !state.currentBoard) {
+      const savedBoardId = localStorage.getItem('workflow-current-board')
+      if (savedBoardId) {
+        const board = state.boards.find(b => b.id === savedBoardId)
+        if (board) {
+          dispatch({ type: 'SET_CURRENT_BOARD', payload: board })
+          // Also restore workspace if not set
+          if (!state.currentWorkspace) {
+            const ws = state.workspaces.find(w => w.id === board.workspace_id)
+            if (ws) dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: ws })
+          }
+        }
+      }
+    }
+  }, [state.boards])
 
   useEffect(() => {
     if (state.currentWorkspace) {

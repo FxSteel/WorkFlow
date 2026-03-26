@@ -3,8 +3,9 @@ import { useApp } from '../../context/AppContext'
 import { cn } from '../../lib/utils'
 import { STATUS_COLORS } from '../../lib/constants'
 
-export default function CronogramaView() {
+export default function CronogramaView({ filteredTasks }) {
   const { state, openTask } = useApp()
+  const allTasks = filteredTasks || allTasks
 
   const weeks = useMemo(() => {
     const today = new Date()
@@ -34,14 +35,14 @@ export default function CronogramaView() {
 
   const tasksByDate = useMemo(() => {
     const map = {}
-    state.tasks.forEach(t => {
+    allTasks.forEach(t => {
       if (t.due_date) {
         if (!map[t.due_date]) map[t.due_date] = []
         map[t.due_date].push(t)
       }
     })
     return map
-  }, [state.tasks])
+  }, [allTasks])
 
   return (
     <div className="flex-1 min-h-0 overflow-auto p-4">

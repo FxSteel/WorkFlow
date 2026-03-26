@@ -77,6 +77,8 @@ function appReducer(state, action) {
     case 'SET_WORKSPACES':
       return { ...state, workspaces: action.payload }
     case 'SET_CURRENT_WORKSPACE':
+      if (action.payload?.id) localStorage.setItem('workflow-current-ws', action.payload.id)
+      else localStorage.removeItem('workflow-current-ws')
       return { ...state, currentWorkspace: action.payload }
     case 'SET_BOARDS':
       return { ...state, boards: action.payload }
@@ -86,6 +88,8 @@ function appReducer(state, action) {
       return { ...state, boards: [...otherBoards, ...newBoards] }
     }
     case 'SET_CURRENT_BOARD':
+      if (action.payload?.id) localStorage.setItem('workflow-current-board', action.payload.id)
+      else localStorage.removeItem('workflow-current-board')
       return { ...state, currentBoard: action.payload }
     case 'SET_SPRINTS':
       return { ...state, sprints: action.payload }

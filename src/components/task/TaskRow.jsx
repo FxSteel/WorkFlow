@@ -99,7 +99,15 @@ function CustomFieldDropdownCell({ cf, opts, selectedOpt, taskId, canEdit, setCu
   )
 }
 
-export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDragging, gridTemplate, customFields = [], isColVisible = () => true }) {
+export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDragging, gridTemplate, customFields = [], isColVisible = () => true, orderedCols = [] }) {
+  // Compute CSS order for each column based on orderedCols
+  const colOrder = useMemo(() => {
+    const map = {}
+    if (orderedCols.length > 0) {
+      orderedCols.forEach((col, i) => { map[col.key] = i + 1 })
+    }
+    return map
+  }, [orderedCols])
   const { state, openTask } = useApp()
   const { user } = useAuth()
   const { updateTask, deleteTask, createTask, setCustomFieldValue } = useSupabase()
@@ -203,7 +211,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
       style={{ gridTemplateColumns: gridTemplate || 'minmax(250px,2fr) 120px 110px 110px 100px 100px 70px' }}
     >
       {/* Task Name */}
-      <div className="px-3 py-2.5 flex items-center gap-2 min-w-0">
+      <div style={{ order: 0 }} className="px-3 py-2.5 flex items-center gap-2 min-w-0">
         {can('moveTask') && <GripVertical className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 cursor-grab" />}
         <button
           onClick={() => openTask(task)}
@@ -214,7 +222,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
       </div>
 
       {/* Assignee */}
-      <div className={`py-2.5 flex items-center justify-center ${isColVisible('assignee') ? 'px-3' : 'overflow-hidden w-0 p-0'}`}>
+      <div style={{ order: colOrder['assignee'] ?? 1 }} className={`py-2.5 flex items-center justify-center ${isColVisible('assignee') ? 'px-3' : 'overflow-hidden w-0 p-0'}`}>
         <button
           ref={assignee.triggerRef}
           onClick={() => { if (!can('editTask')) return; assignee.updatePos('left', 176); assignee.setOpen(!assignee.open) }}
@@ -285,7 +293,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
       </div>
 
       {/* Status */}
-      <div className={`py-2.5 flex items-center justify-center ${isColVisible('status') ? 'px-3' : 'overflow-hidden w-0 p-0'}`}>
+      <div style={{ order: colOrder['status'] ?? 2 }} className={`py-2.5 flex items-center justify-center ${isColVisible('status') ? 'px-3' : 'overflow-hidden w-0 p-0'}`}>
         {(() => {
           const statusObj = (state.boardStatuses || []).find(s => s.name === task.status)
           const statusColor = statusObj?.color || '#9ca3af'
@@ -324,7 +332,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
       </div>
 
       {/* Due Date */}
-      <div className={`py-1.5 flex items-center justify-center ${isColVisible('due_date') ? 'px-3' : 'overflow-hidden w-0 p-0'}`}>
+      <div style={{ order: colOrder['due_date'] ?? 3 }} className={`py-1.5 flex items-center justify-center ${isColVisible('due_date') ? 'px-3' : 'overflow-hidden w-0 p-0'}`}>
         <DatePicker
           value={task.due_date || ''}
           onChange={(val) => updateTask(task.id, { due_date: val || null })}
@@ -335,7 +343,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
       </div>
 
       {/* Priority */}
-      <div className={`py-2.5 flex items-center justify-center ${isColVisible('priority') ? 'px-3' : 'overflow-hidden w-0 p-0'}`}>
+      <div style={{ order: colOrder['priority'] ?? 4 }} className={`py-2.5 flex items-center justify-center ${isColVisible('priority') ? 'px-3' : 'overflow-hidden w-0 p-0'}`}>
         <button
           ref={priority.triggerRef}
           onClick={() => { if (!can('editTask')) return; priority.updatePos('left', 112); priority.setOpen(!priority.open) }}
@@ -371,7 +379,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
       </div>
 
       {/* Sprint */}
-      <div className={`py-2.5 flex items-center justify-center ${isColVisible('sprint') ? 'px-2' : 'overflow-hidden w-0 p-0'}`}>
+      <div style={{ order: colOrder['sprint'] ?? 5 }} className={`py-2.5 flex items-center justify-center ${isColVisible('sprint') ? 'px-2' : 'overflow-hidden w-0 p-0'}`}>
         <button
           ref={sprint.triggerRef}
           onClick={() => { if (!can('editTask')) return; sprint.updatePos('left', 140); sprint.setOpen(!sprint.open) }}
@@ -417,30 +425,32 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
         const cfVisible = isColVisible(`cf_${cf.id}`)
         const values = state.customFieldValues?.[task.id] || []
         const cfVal = values.find(v => v.custom_field_id === cf.id)
+        const cfOrder = colOrder[`cf_${cf.id}`]
 
         if (!cfVisible) {
-          return <div key={cf.id} className="overflow-hidden w-0 p-0" />
+          return <div key={cf.id} style={{ order: cfOrder ?? 99 }} className="overflow-hidden w-0 p-0" />
         }
 
         if (cf.type === 'dropdown') {
           const opts = cf.custom_field_options || []
           const selectedOpt = opts.find(o => o.id === cfVal?.value_option_id)
           return (
-            <CustomFieldDropdownCell
-              key={cf.id}
-              cf={cf}
-              opts={opts}
-              selectedOpt={selectedOpt}
-              taskId={task.id}
-              canEdit={can('editTask')}
-              setCustomFieldValue={setCustomFieldValue}
-            />
+            <div key={cf.id} style={{ order: cfOrder ?? 99 }}>
+              <CustomFieldDropdownCell
+                cf={cf}
+                opts={opts}
+                selectedOpt={selectedOpt}
+                taskId={task.id}
+                canEdit={can('editTask')}
+                setCustomFieldValue={setCustomFieldValue}
+              />
+            </div>
           )
         }
 
         if (cf.type === 'date') {
           return (
-            <div key={cf.id} className="px-2 py-2.5 flex items-center justify-center">
+            <div key={cf.id} style={{ order: cfOrder ?? 99 }} className="px-2 py-2.5 flex items-center justify-center">
               <DatePicker
                 value={cfVal?.value_date || ''}
                 onChange={async (val) => {
@@ -462,7 +472,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
           : ''
 
         return (
-          <div key={cf.id} className="px-2 py-2.5 flex items-center justify-center">
+          <div key={cf.id} style={{ order: cfOrder ?? 99 }} className="px-2 py-2.5 flex items-center justify-center">
             <input
               type={cf.type === 'number' || cf.type === 'price' ? 'number' : 'text'}
               defaultValue={displayValue}
@@ -482,7 +492,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
       })}
 
       {/* Actions */}
-      <div className="px-3 py-2.5 flex items-center justify-center">
+      <div style={{ order: 999 }} className="px-3 py-2.5 flex items-center justify-center">
         {can('editTask') && (
           <button
             ref={actions.triggerRef}

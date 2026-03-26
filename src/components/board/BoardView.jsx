@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { Plus, ChevronDown, ChevronRight, Zap, MoreHorizontal, Pencil, Trash2, Calendar, Palette, AlertTriangle } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useSupabase } from '../../hooks/useSupabase'
@@ -27,6 +27,20 @@ export default function BoardView() {
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [addingToSprint, setAddingToSprint] = useState(null)
   const [boardLoading, setBoardLoading] = useState(false)
+  const [filters, setFilters] = useState({ assignee: null, status: null, priority: null, hasDate: null })
+
+  // Filter tasks
+  const filteredTasks = useMemo(() => {
+    let tasks = state.tasks
+    if (filters.assignee) tasks = tasks.filter(t => t.assignee_id === filters.assignee)
+    if (filters.status) tasks = tasks.filter(t => t.status === filters.status)
+    if (filters.priority) tasks = tasks.filter(t => t.priority === filters.priority)
+    if (filters.hasDate === '_nodate') tasks = tasks.filter(t => !t.due_date)
+    else if (filters.hasDate) tasks = tasks.filter(t => t.due_date === filters.hasDate)
+    return tasks
+  }, [state.tasks, filters])
+
+  const hasActiveFilters = Object.values(filters).some(v => v !== null)
 
   // Column visibility per board (persisted in localStorage)
   const [visibleColumns, setVisibleColumns] = useState({})
@@ -155,6 +169,18 @@ export default function BoardView() {
         onChangeView={handleChangeView}
         onAddView={handleAddView}
         onRemoveView={handleRemoveView}
+        filters={filters}
+        onFilterChange={setFilters}
+        filterOptions={{
+          assignees: (state.orgMembers || []).map(m => ({ value: m.id, label: m.name })),
+          statuses: (state.boardStatuses || []).map(s => ({ value: s.name, label: s.name, dot: s.color })),
+          priorities: [
+            { value: 'critical', label: 'Critica', pill: 'bg-red-500 text-white' },
+            { value: 'high', label: 'Alta', pill: 'bg-orange-500 text-white' },
+            { value: 'medium', label: 'Media', pill: 'bg-yellow-500 text-black' },
+            { value: 'low', label: 'Baja', pill: 'bg-blue-500 text-white' },
+          ],
+        }}
         columnToggle={
           ['tabla', 'kanban', 'fichas'].includes(activeView) ? (
             <ColumnToggle
@@ -170,7 +196,7 @@ export default function BoardView() {
       <div className="flex-1 relative min-h-0 flex flex-col">
       {activeView === 'tabla' && (
         <TableView
-          state={state}
+          state={{ ...state, tasks: filteredTasks }}
           collapsedSprints={collapsedSprints}
           toggleSprint={toggleSprint}
           addingToSprint={addingToSprint}
@@ -181,11 +207,11 @@ export default function BoardView() {
           isColVisible={isColVisible}
         />
       )}
-      {activeView === 'kanban' && <KanbanView isColVisible={isColVisible} />}
-      {activeView === 'calendario' && <CalendarView />}
-      {activeView === 'gantt' && <GanttView />}
-      {activeView === 'fichas' && <FichasView isColVisible={isColVisible} />}
-      {activeView === 'cronograma' && <CronogramaView />}
+      {activeView === 'kanban' && <KanbanView isColVisible={isColVisible} filteredTasks={filteredTasks} />}
+      {activeView === 'calendario' && <CalendarView filteredTasks={filteredTasks} />}
+      {activeView === 'gantt' && <GanttView filteredTasks={filteredTasks} />}
+      {activeView === 'fichas' && <FichasView isColVisible={isColVisible} filteredTasks={filteredTasks} />}
+      {activeView === 'cronograma' && <CronogramaView filteredTasks={filteredTasks} />}
       </div>
 
     </div>
@@ -203,14 +229,67 @@ function TableView({
   const customFields = state.customFields || []
   const visibleCF = customFields.filter(cf => isColVisible(`cf_${cf.id}`))
 
+  // Column order: reorderable via drag & drop
+  const defaultColDefs = [
+    { key: 'assignee', label: 'Responsable', width: '150px' },
+    { key: 'status', label: 'Estado', width: '120px' },
+    { key: 'due_date', label: 'Fecha', width: '120px' },
+    { key: 'priority', label: 'Prioridad', width: '100px' },
+    { key: 'sprint', label: 'Sprint', width: '150px' },
+    ...customFields.map(cf => ({ key: `cf_${cf.id}`, label: cf.name, width: `${Math.max(cf.name.length * 9 + 24, 140)}px`, cfId: cf.id })),
+  ]
+
+  const boardId = state.currentBoard?.id
+  const colOrderKey = `workflow-col-order-${boardId}`
+  const [columnOrder, setColumnOrder] = useState(() => {
+    try { const saved = JSON.parse(localStorage.getItem(colOrderKey)); return saved || null } catch { return null }
+  })
+  const [draggedCol, setDraggedCol] = useState(null)
+  const [dragOverCol, setDragOverCol] = useState(null)
+
+  // Reset column order when board changes
+  useEffect(() => {
+    try { const saved = JSON.parse(localStorage.getItem(`workflow-col-order-${boardId}`)); setColumnOrder(saved || null) } catch { setColumnOrder(null) }
+  }, [boardId])
+
+  const orderedCols = (() => {
+    if (!columnOrder) return defaultColDefs
+    // Map saved order to current col defs, append any new cols not in saved order
+    const ordered = []
+    for (const key of columnOrder) {
+      const col = defaultColDefs.find(c => c.key === key)
+      if (col) ordered.push(col)
+    }
+    for (const col of defaultColDefs) {
+      if (!ordered.find(c => c.key === col.key)) ordered.push(col)
+    }
+    return ordered
+  })()
+
+  const handleColDragStart = (colKey) => setDraggedCol(colKey)
+  const handleColDragOver = (e, colKey) => {
+    e.preventDefault()
+    if (draggedCol && draggedCol !== colKey) setDragOverCol(colKey)
+  }
+  const handleColDrop = (colKey) => {
+    if (!draggedCol || draggedCol === colKey) { setDraggedCol(null); setDragOverCol(null); return }
+    const keys = orderedCols.map(c => c.key)
+    const fromIdx = keys.indexOf(draggedCol)
+    const toIdx = keys.indexOf(colKey)
+    if (fromIdx === -1 || toIdx === -1) return
+    const newKeys = [...keys]
+    newKeys.splice(fromIdx, 1)
+    newKeys.splice(toIdx, 0, draggedCol)
+    setColumnOrder(newKeys)
+    localStorage.setItem(`workflow-col-order-${boardId}`, JSON.stringify(newKeys))
+    setDraggedCol(null)
+    setDragOverCol(null)
+  }
+  const handleColDragEnd = () => { setDraggedCol(null); setDragOverCol(null) }
+
   const gridTemplate = [
     'minmax(250px,2fr)',
-    isColVisible('assignee') ? '150px' : '0px',
-    isColVisible('status') ? '120px' : '0px',
-    isColVisible('due_date') ? '120px' : '0px',
-    isColVisible('priority') ? '100px' : '0px',
-    isColVisible('sprint') ? '150px' : '0px',
-    ...customFields.map(cf => isColVisible(`cf_${cf.id}`) ? `${Math.max(cf.name.length * 9 + 24, 140)}px` : '0px'),
+    ...orderedCols.map(col => isColVisible(col.key) ? col.width : '0px'),
     '50px',
   ].join(' ')
   const { can } = usePermissions()
@@ -470,13 +549,20 @@ function TableView({
                 <div className="min-w-fit">
                 <div className="grid gap-0 bg-muted/50 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider" style={{ gridTemplateColumns: gridTemplate }}>
                   <div className="px-3 py-2">Tarea</div>
-                  <div className={`px-3 py-2 text-center ${!isColVisible('assignee') ? 'overflow-hidden' : ''}`}>{isColVisible('assignee') ? 'Responsable' : ''}</div>
-                  <div className={`px-3 py-2 text-center ${!isColVisible('status') ? 'overflow-hidden' : ''}`}>{isColVisible('status') ? 'Estado' : ''}</div>
-                  <div className={`px-3 py-2 text-center ${!isColVisible('due_date') ? 'overflow-hidden' : ''}`}>{isColVisible('due_date') ? 'Fecha' : ''}</div>
-                  <div className={`px-3 py-2 text-center ${!isColVisible('priority') ? 'overflow-hidden' : ''}`}>{isColVisible('priority') ? 'Prioridad' : ''}</div>
-                  <div className={`px-3 py-2 text-center ${!isColVisible('sprint') ? 'overflow-hidden' : ''}`}>{isColVisible('sprint') ? 'Sprint' : ''}</div>
-                  {customFields.map(cf => (
-                    <div key={cf.id} className={`px-3 py-2 text-center whitespace-nowrap ${!isColVisible(`cf_${cf.id}`) ? 'overflow-hidden' : ''}`}>{isColVisible(`cf_${cf.id}`) ? cf.name : ''}</div>
+                  {orderedCols.map(col => (
+                    <div
+                      key={col.key}
+                      draggable
+                      onDragStart={() => handleColDragStart(col.key)}
+                      onDragOver={(e) => handleColDragOver(e, col.key)}
+                      onDrop={() => handleColDrop(col.key)}
+                      onDragEnd={handleColDragEnd}
+                      className={`px-3 py-2 text-center whitespace-nowrap cursor-grab active:cursor-grabbing select-none transition-colors ${
+                        !isColVisible(col.key) ? 'overflow-hidden' : ''
+                      } ${dragOverCol === col.key ? 'bg-primary/10' : ''} ${draggedCol === col.key ? 'opacity-40' : ''}`}
+                    >
+                      {isColVisible(col.key) ? col.label : ''}
+                    </div>
                   ))}
                   <div className="px-3 py-2 text-center"></div>
                 </div>
@@ -495,6 +581,7 @@ function TableView({
                       gridTemplate={gridTemplate}
                       customFields={customFields}
                       isColVisible={isColVisible}
+                      orderedCols={orderedCols}
                     />
                   </div>
                 ))}
