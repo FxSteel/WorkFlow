@@ -401,14 +401,42 @@ function MembersSettings() {
     let emailSent = false
     if (supabaseAdmin) {
       const senderName = user.user_metadata?.full_name || user.email
-      const { error: emailErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(inviteEmail, {
-        redirectTo: window.location.origin,
-        data: { invited_to_org: org.name, invited_by: senderName },
-      })
-      if (!emailErr) emailSent = true
+      try {
+        // First check if user already exists
+        const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
+        const userExists = existingUsers?.users?.find(u => u.email === inviteEmail)
+
+        if (userExists) {
+          // User exists — send magic link instead
+          const { error: otpErr } = await supabase.auth.signInWithOtp({
+            email: inviteEmail,
+            options: {
+              shouldCreateUser: false,
+              emailRedirectTo: window.location.origin,
+            }
+          })
+          if (!otpErr) emailSent = true
+          else console.error('OTP error:', otpErr)
+        } else {
+          // New user — send invite
+          const { error: emailErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(inviteEmail, {
+            redirectTo: window.location.origin,
+            data: { invited_to_org: org.name, invited_by: senderName },
+          })
+          if (!emailErr) emailSent = true
+          else console.error('Invite error:', emailErr)
+        }
+      } catch (err) {
+        console.error('Email send error:', err)
+      }
+    } else {
+      console.warn('supabaseAdmin not available — VITE_SUPABASE_SERVICE_ROLE_KEY missing')
     }
 
-    toast.success(emailSent ? `Invitacion enviada a ${inviteEmail}` : `Invitacion enviada a ${inviteEmail}`)
+    toast.success(emailSent
+      ? `Invitacion enviada a ${inviteEmail}`
+      : `Invitacion guardada (el correo no pudo enviarse)`
+    )
     setEmail(''); setRole('member'); setSelectedWorkspaces([])
     fetchInvites(org.id)
     setSending(false)
