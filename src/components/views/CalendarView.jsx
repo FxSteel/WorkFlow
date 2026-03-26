@@ -1,15 +1,20 @@
 import { useState, useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { useSupabase } from '../../hooks/useSupabase'
 import { cn } from '../../lib/utils'
 import { STATUS_COLORS } from '../../lib/constants'
+import { toast } from 'sonner'
 
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
 export default function CalendarView() {
-  const { state, openTask } = useApp()
+  const { state, openTask, dispatch } = useApp()
+  const { updateTask } = useSupabase()
   const [currentDate, setCurrentDate] = useState(new Date())
+  const [draggedTask, setDraggedTask] = useState(null)
+  const [dragOverDate, setDragOverDate] = useState(null)
 
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
@@ -65,6 +70,63 @@ export default function CalendarView() {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
   }
 
+  // Drag & Drop handlers
+  const handleDragStart = (e, task) => {
+    setDraggedTask(task)
+    e.dataTransfer.effectAllowed = 'move'
+    // Make the drag image slightly transparent
+    if (e.target) {
+      e.target.style.opacity = '0.5'
+      setTimeout(() => { if (e.target) e.target.style.opacity = '1' }, 0)
+    }
+  }
+
+  const handleDragEnd = () => {
+    setDraggedTask(null)
+    setDragOverDate(null)
+  }
+
+  const handleDragOver = (e, dateKey) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragOverDate !== dateKey) setDragOverDate(dateKey)
+  }
+
+  const handleDragLeave = (e, dateKey) => {
+    // Only clear if actually leaving the cell (not entering a child)
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      if (dragOverDate === dateKey) setDragOverDate(null)
+    }
+  }
+
+  const handleDrop = async (e, dateKey) => {
+    e.preventDefault()
+    setDragOverDate(null)
+
+    if (!draggedTask) return
+
+    // Don't do anything if dropping on the same date
+    if (draggedTask.due_date === dateKey) {
+      setDraggedTask(null)
+      return
+    }
+
+    // Optimistic update
+    dispatch({ type: 'UPDATE_TASK', payload: { id: draggedTask.id, due_date: dateKey } })
+
+    // Save to DB
+    const { error } = await updateTask(draggedTask.id, { due_date: dateKey })
+    if (error) {
+      // Revert on error
+      dispatch({ type: 'UPDATE_TASK', payload: { id: draggedTask.id, due_date: draggedTask.due_date } })
+      toast.error('Error al mover la tarea')
+    } else {
+      toast.success('Fecha actualizada')
+    }
+
+    setDraggedTask(null)
+  }
+
   return (
     <div className="flex-1 min-h-0 overflow-auto p-4 flex flex-col">
       {/* Header */}
@@ -105,14 +167,19 @@ export default function CalendarView() {
           const key = formatDateKey(day.date)
           const tasks = tasksByDate[key] || []
           const isToday = key === todayKey
+          const isDragOver = dragOverDate === key && draggedTask
 
           return (
             <div
               key={i}
+              onDragOver={(e) => handleDragOver(e, key)}
+              onDragLeave={(e) => handleDragLeave(e, key)}
+              onDrop={(e) => handleDrop(e, key)}
               className={cn(
-                'border-r border-b border-border p-1.5 min-h-[90px] transition-colors',
+                'border-r border-b border-border p-1.5 min-h-[90px] transition-all',
                 !day.isCurrentMonth && 'bg-muted/30',
-                isToday && 'bg-primary/5'
+                isToday && 'bg-primary/5',
+                isDragOver && 'bg-primary/10 ring-2 ring-inset ring-primary/30'
               )}
             >
               <div className="flex items-center justify-between mb-1">
@@ -130,10 +197,14 @@ export default function CalendarView() {
                 {tasks.slice(0, 3).map(task => (
                   <button
                     key={task.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, task)}
+                    onDragEnd={handleDragEnd}
                     onClick={() => openTask(task)}
                     className={cn(
-                      'w-full text-left px-1.5 py-0.5 rounded text-[10px] font-medium text-white truncate transition-opacity hover:opacity-80',
-                      STATUS_COLORS[task.status] || 'bg-gray-400'
+                      'w-full text-left px-1.5 py-0.5 rounded text-[10px] font-medium text-white truncate transition-all hover:opacity-80 cursor-grab active:cursor-grabbing',
+                      STATUS_COLORS[task.status] || 'bg-gray-400',
+                      draggedTask?.id === task.id && 'opacity-40 scale-95'
                     )}
                   >
                     {task.title}

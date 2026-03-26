@@ -15,8 +15,6 @@ import CronogramaView from '../views/CronogramaView'
 import { cn } from '../../lib/utils'
 import BoardSkeleton from '../skeleton/BoardSkeleton'
 import { toast } from 'sonner'
-import StatusConfigModal from './StatusConfigModal'
-import CustomFieldsConfigModal from './CustomFieldsConfigModal'
 import EmptyState from '../ui/EmptyState'
 import ColorPicker from '../ui/ColorPicker'
 import ColumnToggle from './ColumnToggle'
@@ -29,10 +27,6 @@ export default function BoardView() {
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [addingToSprint, setAddingToSprint] = useState(null)
   const [boardLoading, setBoardLoading] = useState(false)
-  const showStatusConfig = state.showStatusConfig
-  const showCustomFields = state.showCustomFields
-  const setShowStatusConfig = (v) => dispatch({ type: 'SHOW_STATUS_CONFIG', payload: v })
-  const setShowCustomFields = (v) => dispatch({ type: 'SHOW_CUSTOM_FIELDS', payload: v })
 
   // Column visibility per board (persisted in localStorage)
   const [visibleColumns, setVisibleColumns] = useState({})
@@ -194,12 +188,6 @@ export default function BoardView() {
       {activeView === 'cronograma' && <CronogramaView />}
       </div>
 
-      <StatusConfigModal open={showStatusConfig} onClose={() => setShowStatusConfig(false)} />
-      <CustomFieldsConfigModal
-        open={!!showCustomFields}
-        boardId={showCustomFields?.id || state.currentBoard?.id}
-        onClose={() => setShowCustomFields(false)}
-      />
     </div>
   )
 }

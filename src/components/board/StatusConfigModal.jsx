@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, Plus, Trash2, Settings2 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useSupabase } from '../../hooks/useSupabase'
@@ -6,20 +6,34 @@ import { supabase } from '../../lib/supabase'
 import { toast } from 'sonner'
 
 
-export default function StatusConfigModal({ open, onClose }) {
+export default function StatusConfigModal({ open, onClose, boardId: propBoardId }) {
   const { state, dispatch } = useApp()
-  const { createBoardStatus, updateBoardStatus, deleteBoardStatus } = useSupabase()
+  const { createBoardStatus, updateBoardStatus, deleteBoardStatus, fetchBoardStatuses } = useSupabase()
   const [editingId, setEditingId] = useState(null)
   const [editName, setEditName] = useState('')
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState('#3b82f6')
   const [showNewForm, setShowNewForm] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [localStatuses, setLocalStatuses] = useState([])
+
+  const boardId = propBoardId || state.currentBoard?.id
+  const isSameBoard = boardId === state.currentBoard?.id
+
+  useEffect(() => {
+    if (open && boardId && !isSameBoard) {
+      supabase
+        .from('board_statuses')
+        .select('*')
+        .eq('board_id', boardId)
+        .order('position')
+        .then(({ data }) => setLocalStatuses(data || []))
+    }
+  }, [open, boardId, isSameBoard])
 
   if (!open) return null
 
-  const statuses = state.boardStatuses || []
-  const boardId = state.currentBoard?.id
+  const statuses = isSameBoard ? (state.boardStatuses || []) : localStatuses
 
   const handleUpdateName = async (id) => {
     if (!editName.trim()) { setEditingId(null); return }

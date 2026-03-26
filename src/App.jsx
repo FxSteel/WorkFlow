@@ -24,6 +24,8 @@ import { usePresence } from './hooks/usePresence'
 import { useSubscription } from './hooks/useSubscription'
 import Paywall from './components/billing/Paywall'
 import AdminPanel from './components/admin/AdminPanel'
+import StatusConfigModal from './components/board/StatusConfigModal'
+import CustomFieldsConfigModal from './components/board/CustomFieldsConfigModal'
 
 function getTaskEditorPref() {
   return localStorage.getItem('workflow-task-editor-view') || 'sidebar'
@@ -163,6 +165,16 @@ function AppContent() {
       <SearchModal isOpen={showSearch} onClose={() => setShowSearch(false)} />
       <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
       <ProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} />
+      <StatusConfigModal
+        open={!!state.showStatusConfig}
+        boardId={state.showStatusConfig?.id || state.currentBoard?.id}
+        onClose={() => dispatch({ type: 'SHOW_STATUS_CONFIG', payload: false })}
+      />
+      <CustomFieldsConfigModal
+        open={!!state.showCustomFields}
+        boardId={state.showCustomFields?.id || state.currentBoard?.id}
+        onClose={() => dispatch({ type: 'SHOW_CUSTOM_FIELDS', payload: false })}
+      />
     </div>
   )
 }
