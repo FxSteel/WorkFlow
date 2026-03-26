@@ -195,7 +195,11 @@ export default function BoardView() {
       </div>
 
       <StatusConfigModal open={showStatusConfig} onClose={() => setShowStatusConfig(false)} />
-      <CustomFieldsConfigModal open={showCustomFields} onClose={() => setShowCustomFields(false)} />
+      <CustomFieldsConfigModal
+        open={!!showCustomFields}
+        boardId={showCustomFields?.id || state.currentBoard?.id}
+        onClose={() => setShowCustomFields(false)}
+      />
     </div>
   )
 }

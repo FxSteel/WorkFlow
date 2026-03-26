@@ -659,12 +659,12 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
                 <CtxMenuItem
                   icon={Settings2}
                   label="Configurar estados"
-                  onClick={() => { dispatch({ type: 'SHOW_STATUS_CONFIG', payload: true }); setCtxMenu(null) }}
+                  onClick={() => { dispatch({ type: 'SHOW_STATUS_CONFIG', payload: ctxMenu.data }); setCtxMenu(null) }}
                 />
                 <CtxMenuItem
                   icon={Puzzle}
                   label="Campos personalizados"
-                  onClick={() => { dispatch({ type: 'SHOW_CUSTOM_FIELDS', payload: true }); setCtxMenu(null) }}
+                  onClick={() => { dispatch({ type: 'SHOW_CUSTOM_FIELDS', payload: ctxMenu.data }); setCtxMenu(null) }}
                 />
                 <CtxMenuItem
                   icon={Copy}

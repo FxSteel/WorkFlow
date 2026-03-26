@@ -216,11 +216,17 @@ function GoogleConnect({ user, onSaved }) {
 
   const handleConnect = async () => {
     setLoading(true)
-    const { error } = await supabase.auth.linkIdentity({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      options: {
+        redirectTo: window.location.origin,
+        queryParams: { prompt: 'select_account' },
+      },
     })
-    if (error) setLoading(false)
+    if (error) {
+      toast.error('Error al conectar con Google')
+      setLoading(false)
+    }
   }
 
   return (
