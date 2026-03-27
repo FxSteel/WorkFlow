@@ -1,9 +1,120 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, Plus, Trash2, Type, Hash, Calendar, ChevronDown, DollarSign, Pencil, ArrowUp, ArrowDown, Share2 } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { X, Plus, Trash2, Type, Hash, Calendar, ChevronDown, DollarSign, Pencil, ArrowUp, ArrowDown, Share2, Search, Smile } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import { supabase } from '../../lib/supabase'
 import { toast } from 'sonner'
+import { FIELD_ICONS, resolveFieldIcon } from '../../lib/fieldIcons'
+
+const CHUNK = 200
+
+function IconPickerGrid({ triggerRef, selected, onSelect, onClear, onClose }) {
+  const [query, setQuery] = useState('')
+  const [visibleCount, setVisibleCount] = useState(CHUNK)
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 280 })
+  const sentinelRef = useRef(null)
+  const popoverRef = useRef(null)
+
+  const filtered = query.length >= 1
+    ? FIELD_ICONS.filter(i => i.name.toLowerCase().includes(query.toLowerCase()))
+    : FIELD_ICONS
+
+  useEffect(() => { setVisibleCount(CHUNK) }, [query])
+
+  // Position below the trigger button
+  useEffect(() => {
+    if (!triggerRef?.current) return
+    const rect = triggerRef.current.getBoundingClientRect()
+    const width = 300
+    let left = rect.left
+    if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8
+    setPos({ top: rect.bottom + 6, left, width })
+  }, [])
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (
+        popoverRef.current && !popoverRef.current.contains(e.target) &&
+        triggerRef.current && !triggerRef.current.contains(e.target)
+      ) onClose()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  // Infinite scroll sentinel
+  useEffect(() => {
+    if (!sentinelRef.current) return
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) {
+        setVisibleCount(prev => Math.min(prev + CHUNK, filtered.length))
+      }
+    }, { threshold: 0.1 })
+    observer.observe(sentinelRef.current)
+    return () => observer.disconnect()
+  }, [filtered.length])
+
+  const visible = filtered.slice(0, visibleCount)
+
+  return createPortal(
+    <div
+      ref={popoverRef}
+      className="fixed z-[200] rounded-xl border border-border bg-popover shadow-2xl overflow-hidden animate-scale-in"
+      style={{ top: pos.top, left: pos.left, width: pos.width }}
+    >
+      {/* Search */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+        <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <input
+          autoFocus
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Buscar ícono..."
+          className="flex-1 text-xs bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none"
+        />
+        {selected && (
+          <button
+            onClick={onClear}
+            className="text-[10px] text-muted-foreground hover:text-destructive transition-colors whitespace-nowrap"
+          >
+            Quitar
+          </button>
+        )}
+      </div>
+
+      {/* Grid */}
+      <div className="grid grid-cols-8 gap-0.5 p-2 h-52 overflow-y-auto">
+        {visible.map(({ name, icon: Icon }) => (
+          <button
+            key={name}
+            title={name}
+            onClick={() => onSelect(name)}
+            className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
+              selected === name
+                ? 'bg-primary text-primary-foreground'
+                : 'hover:bg-accent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Icon className="w-4 h-4" />
+          </button>
+        ))}
+        {visible.length === 0 && (
+          <p className="col-span-8 text-xs text-muted-foreground text-center py-4">Sin resultados</p>
+        )}
+        <div ref={sentinelRef} className="col-span-8 h-1" />
+      </div>
+
+      {filtered.length > visibleCount && (
+        <p className="text-[10px] text-muted-foreground text-center py-1 border-t border-border">
+          Mostrando {visibleCount} de {filtered.length}
+        </p>
+      )}
+    </div>,
+    document.body
+  )
+}
 
 const FIELD_TYPES = [
   { value: 'text', label: 'Texto', icon: Type },
@@ -18,7 +129,8 @@ export default function CustomFieldsConfigModal({ open, onClose, boardId: propBo
   const { createCustomField, updateCustomField, deleteCustomField, addCustomFieldOption, deleteCustomFieldOption, fetchCustomFields } = useSupabase()
   const [mode, setMode] = useState('list') // list | create | edit | share
   const [editingField, setEditingField] = useState(null)
-  const [form, setForm] = useState({ name: '', type: 'text', options: [] })
+  const [form, setForm] = useState({ name: '', type: 'text', options: [], icon: null })
+  const [showIconPicker, setShowIconPicker] = useState(false)
   const [newOptionLabel, setNewOptionLabel] = useState('')
   const [newOptionColor, setNewOptionColor] = useState('#6b7280')
   const [confirmDelete, setConfirmDelete] = useState(null) // field to delete
@@ -26,6 +138,7 @@ export default function CustomFieldsConfigModal({ open, onClose, boardId: propBo
   const [allBoards, setAllBoards] = useState([])
   const [selectedBoards, setSelectedBoards] = useState([])
   const [sharingLoading, setSharingLoading] = useState(false)
+  const iconBtnRef = useRef(null)
 
   const boardId = propBoardId || state.currentBoard?.id
   const [localFields, setLocalFields] = useState([])
@@ -47,11 +160,12 @@ export default function CustomFieldsConfigModal({ open, onClose, boardId: propBo
   const fields = boardId === state.currentBoard?.id ? (state.customFields || []) : localFields
 
   const resetForm = () => {
-    setForm({ name: '', type: 'text', options: [] })
+    setForm({ name: '', type: 'text', options: [], icon: null })
     setNewOptionLabel('')
     setNewOptionColor('#6b7280')
     setEditingField(null)
     setShareField(null)
+    setShowIconPicker(false)
     setMode('list')
   }
 
@@ -75,6 +189,7 @@ export default function CustomFieldsConfigModal({ open, onClose, boardId: propBo
       type: form.type,
       position: fields.length,
       options: form.options,
+      icon: form.icon || null,
     })
     if (error) toast.error('Error al crear campo')
     else { toast.success('Campo creado'); resetForm(); refreshFields() }
@@ -82,7 +197,7 @@ export default function CustomFieldsConfigModal({ open, onClose, boardId: propBo
 
   const handleUpdate = async () => {
     if (!editingField || !form.name.trim()) return
-    await updateCustomField(editingField.id, { name: form.name.trim() })
+    await updateCustomField(editingField.id, { name: form.name.trim(), icon: form.icon || null })
     // Handle dropdown options: delete removed, add new
     if (editingField.type === 'dropdown') {
       const existingIds = (editingField.custom_field_options || []).map(o => o.id)
@@ -115,7 +230,9 @@ export default function CustomFieldsConfigModal({ open, onClose, boardId: propBo
       name: field.name,
       type: field.type,
       options: (field.custom_field_options || []).map(o => ({ ...o })),
+      icon: field.icon || null,
     })
+    setShowIconPicker(false)
     setMode('edit')
   }
 
@@ -221,6 +338,7 @@ export default function CustomFieldsConfigModal({ open, onClose, boardId: propBo
             <div className="space-y-1.5">
               {fields.map((field, idx) => {
                 const TypeIcon = FIELD_TYPES.find(t => t.value === field.type)?.icon || Type
+                const FieldIcon = resolveFieldIcon(field.icon, TypeIcon)
                 return (
                   <div
                     key={field.id}
@@ -242,7 +360,7 @@ export default function CustomFieldsConfigModal({ open, onClose, boardId: propBo
                         <ArrowDown className="w-2.5 h-2.5" />
                       </button>
                     </div>
-                    <TypeIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <FieldIcon className="w-4 h-4 text-muted-foreground shrink-0" />
                     <span className="text-sm font-medium text-foreground flex-1 truncate">{field.name}</span>
                     <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
                       {FIELD_TYPES.find(t => t.value === field.type)?.label}
@@ -282,14 +400,40 @@ export default function CustomFieldsConfigModal({ open, onClose, boardId: propBo
             <div className="space-y-4">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Nombre</label>
-                <input
-                  value={form.name}
-                  onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Nombre del campo"
-                  maxLength={50}
-                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                  autoFocus
-                />
+                <div className="flex items-center gap-2">
+                  {/* Compact icon button */}
+                  <button
+                    ref={iconBtnRef}
+                    type="button"
+                    title={form.icon || 'Elegir ícono'}
+                    onClick={() => setShowIconPicker(p => !p)}
+                    className="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg border border-border bg-background hover:bg-accent transition-colors"
+                  >
+                    {(() => {
+                      const Icon = resolveFieldIcon(form.icon, null)
+                      return form.icon
+                        ? <Icon className="w-4 h-4 text-primary" />
+                        : <Smile className="w-4 h-4 text-muted-foreground" />
+                    })()}
+                  </button>
+                  <input
+                    value={form.name}
+                    onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Nombre del campo"
+                    maxLength={50}
+                    className="flex-1 px-3 py-2 text-sm bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    autoFocus
+                  />
+                </div>
+                {showIconPicker && (
+                  <IconPickerGrid
+                    triggerRef={iconBtnRef}
+                    selected={form.icon}
+                    onSelect={(name) => { setForm(prev => ({ ...prev, icon: name })); setShowIconPicker(false) }}
+                    onClear={() => { setForm(prev => ({ ...prev, icon: null })); setShowIconPicker(false) }}
+                    onClose={() => setShowIconPicker(false)}
+                  />
+                )}
               </div>
 
               {mode === 'create' && (

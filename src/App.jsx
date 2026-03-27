@@ -26,6 +26,7 @@ import Paywall from './components/billing/Paywall'
 import AdminPanel from './components/admin/AdminPanel'
 import StatusConfigModal from './components/board/StatusConfigModal'
 import CustomFieldsConfigModal from './components/board/CustomFieldsConfigModal'
+import { useNotifications } from './hooks/useNotifications'
 
 function getTaskEditorPref() {
   return localStorage.getItem('workflow-task-editor-view') || 'sidebar'
@@ -36,6 +37,7 @@ function AppContent() {
   const { user, signOut } = useAuth()
   usePresence(user?.id)
   const { fetchOrganizations, fetchWorkspaces, fetchBoards, fetchOrgMembers } = useSupabase()
+  const { checkDueDateReminders } = useNotifications()
   const [showSprintModal, setShowSprintModal] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -125,6 +127,16 @@ function AppContent() {
       dispatch({ type: 'RESET' })
     }
   }, [user, dispatch])
+
+  // Check due date reminders once per session when org members are available
+  const dueDateCheckedRef = useRef(false)
+  useEffect(() => {
+    if (user && state.orgMembers.length > 0 && !dueDateCheckedRef.current) {
+      dueDateCheckedRef.current = true
+      const myMemberIds = state.orgMembers.filter(m => m.user_id === user.id).map(m => m.id)
+      checkDueDateReminders({ memberIds: myMemberIds, userId: user.id })
+    }
+  }, [user, state.orgMembers])
 
   // Cmd+L / Ctrl+L shortcut
   useEffect(() => {

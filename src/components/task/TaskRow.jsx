@@ -111,7 +111,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
   const { state, openTask } = useApp()
   const { user } = useAuth()
   const { updateTask, deleteTask, createTask, setCustomFieldValue } = useSupabase()
-  const { notifyTaskAssigned } = useNotifications()
+  const { notifyTaskAssigned, notifyStatusChange, notifyPriorityChange, notifyTaskCompleted } = useNotifications()
   const { can } = usePermissions()
 
   const assignableUsers = useMemo(() => {
@@ -143,12 +143,30 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
     await updateTask(task.id, { status: s })
     toast.success('Estado actualizado')
     status.setOpen(false)
+    if (task.assignee_id) {
+      const member = state.orgMembers.find(m => m.id === task.assignee_id)
+      if (member) {
+        const isLast = state.boardStatuses?.length > 0 &&
+          [...state.boardStatuses].sort((a, b) => a.position - b.position).at(-1)?.name === s
+        if (isLast) {
+          notifyTaskCompleted({ task, assigneeMember: member, fromUser: user, workspaceId: state.currentWorkspace?.id })
+        } else {
+          notifyStatusChange({ task, assigneeMember: member, newStatus: s, fromUser: user, workspaceId: state.currentWorkspace?.id })
+        }
+      }
+    }
   }
 
   const handlePriorityChange = async (p) => {
     await updateTask(task.id, { priority: p })
     toast.success('Prioridad actualizada')
     priority.setOpen(false)
+    if (task.assignee_id) {
+      const member = state.orgMembers.find(m => m.id === task.assignee_id)
+      if (member) {
+        notifyPriorityChange({ task, assigneeMember: member, newPriority: p, fromUser: user, workspaceId: state.currentWorkspace?.id })
+      }
+    }
   }
 
   const handleAssigneeChange = async (memberId, memberName) => {

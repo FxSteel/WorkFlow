@@ -14,12 +14,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { cn } from '../../lib/utils'
 import { STATUS_OPTIONS, STATUS_COLORS, PRIORITY_OPTIONS } from '../../lib/constants'
 import { useNotifications } from '../../hooks/useNotifications'
+import { resolveFieldIcon } from '../../lib/fieldIcons'
 import { toast } from 'sonner'
 
 export default function TaskSidePanel() {
   const { state, dispatch, closeSidePanel } = useApp()
   const { user } = useAuth()
-  const { notifyTaskAssigned } = useNotifications()
+  const { notifyTaskAssigned, notifyStatusChange, notifyPriorityChange, notifyTaskCompleted } = useNotifications()
   const { updateTask, deleteTask, createTask, setCustomFieldValue } = useSupabase()
   const task = state.sidePanelTask
   const isNew = task && !task.id
@@ -207,7 +208,21 @@ export default function TaskSidePanel() {
           <PropRow icon={Tag} label="Estado">
             <Select
               value={task.status || (state.boardStatuses?.[0]?.name || 'Por hacer')}
-              onValueChange={(val) => handleFieldUpdate({ status: val })}
+              onValueChange={(val) => {
+                handleFieldUpdate({ status: val })
+                if (task.assignee_id) {
+                  const member = state.orgMembers.find(m => m.id === task.assignee_id)
+                  if (member) {
+                    const isLast = state.boardStatuses?.length > 0 &&
+                      [...state.boardStatuses].sort((a, b) => a.position - b.position).at(-1)?.name === val
+                    if (isLast) {
+                      notifyTaskCompleted({ task, assigneeMember: member, fromUser: user, workspaceId: state.currentWorkspace?.id })
+                    } else {
+                      notifyStatusChange({ task, assigneeMember: member, newStatus: val, fromUser: user, workspaceId: state.currentWorkspace?.id })
+                    }
+                  }
+                }
+              }}
             >
               <SelectTrigger className="border-0 bg-transparent h-7 px-1 text-sm hover:bg-accent w-auto">
                 {(() => {
@@ -244,7 +259,15 @@ export default function TaskSidePanel() {
           <PropRow icon={Flag} label="Prioridad">
             <Select
               value={task.priority || 'medium'}
-              onValueChange={(val) => handleFieldUpdate({ priority: val })}
+              onValueChange={(val) => {
+                handleFieldUpdate({ priority: val })
+                if (task.assignee_id) {
+                  const member = state.orgMembers.find(m => m.id === task.assignee_id)
+                  if (member) {
+                    notifyPriorityChange({ task, assigneeMember: member, newPriority: val, fromUser: user, workspaceId: state.currentWorkspace?.id })
+                  }
+                }
+              }}
             >
               <SelectTrigger className="border-0 bg-transparent h-7 px-1 text-sm hover:bg-accent w-auto">
                 {(() => {
@@ -295,7 +318,8 @@ export default function TaskSidePanel() {
             const values = state.customFieldValues?.[task.id] || []
             const cfVal = values.find(v => v.custom_field_id === cf.id)
             const pending = pendingCFValues[cf.id]
-            const CFIcon = cf.type === 'number' ? Hash : cf.type === 'date' ? Calendar : cf.type === 'price' ? DollarSign : cf.type === 'dropdown' ? ChevronDown : Type
+            const typeIcon = cf.type === 'number' ? Hash : cf.type === 'date' ? Calendar : cf.type === 'price' ? DollarSign : cf.type === 'dropdown' ? ChevronDown : Type
+            const CFIcon = resolveFieldIcon(cf.icon, typeIcon)
 
             if (cf.type === 'dropdown') {
               const opts = cf.custom_field_options || []

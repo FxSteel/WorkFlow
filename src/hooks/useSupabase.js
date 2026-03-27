@@ -547,7 +547,7 @@ export function useSupabase() {
   const createCustomField = useCallback(async (boardId, field) => {
     const { data, error } = await supabase
       .from('custom_fields')
-      .insert({ board_id: boardId, name: field.name, type: field.type, position: field.position || 0 })
+      .insert({ board_id: boardId, name: field.name, type: field.type, position: field.position || 0, icon: field.icon || null })
       .select('*, custom_field_options(*)')
       .single()
     if (!error && data) {

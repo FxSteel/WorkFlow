@@ -2,10 +2,12 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Bell, Check, X, Loader2, Mail, Users, CheckCircle2,
   UserPlus, AtSign, MessageSquare, ClipboardList,
+  Tag, Flag, Zap, Calendar, CheckCheck,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useApp } from '../../context/AppContext'
 import { useSupabase } from '../../hooks/useSupabase'
+import { useNotifications } from '../../hooks/useNotifications'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
 import EmptyState from '../ui/EmptyState'
@@ -15,12 +17,19 @@ const TYPE_CONFIG = {
   mention: { icon: AtSign, color: 'text-purple-500', bg: 'bg-purple-500/10' },
   comment: { icon: MessageSquare, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   invite: { icon: UserPlus, color: 'text-orange-500', bg: 'bg-orange-500/10' },
+  status_change: { icon: Tag, color: 'text-sky-500', bg: 'bg-sky-500/10' },
+  priority_change: { icon: Flag, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+  task_completed: { icon: CheckCheck, color: 'text-green-500', bg: 'bg-green-500/10' },
+  new_sprint: { icon: Zap, color: 'text-violet-500', bg: 'bg-violet-500/10' },
+  invite_accepted: { icon: Users, color: 'text-teal-500', bg: 'bg-teal-500/10' },
+  due_date_reminder: { icon: Calendar, color: 'text-rose-500', bg: 'bg-rose-500/10' },
 }
 
 export default function NotificationCenter() {
   const { user } = useAuth()
   const { state, dispatch, openTask } = useApp()
   const { fetchMyInvites, acceptInvite, declineInvite, fetchOrganizations } = useSupabase()
+  const { notifyInviteAccepted } = useNotifications()
   const [isOpen, setIsOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [invites, setInvites] = useState([])
@@ -86,6 +95,11 @@ export default function NotificationCenter() {
     setLoadingId(invite.id)
     const userName = user.user_metadata?.full_name || user.email.split('@')[0]
     await acceptInvite(invite.id, invite.org_id, user.id, userName, user.email, invite.role, invite.workspace_ids)
+    notifyInviteAccepted({
+      invitedByUserId: invite.invited_by,
+      acceptedUserName: userName,
+      orgName: invite.organizations?.name || 'la organización',
+    })
     setInvites(prev => prev.filter(i => i.id !== invite.id))
     await fetchOrganizations()
     setLoadingId(null)

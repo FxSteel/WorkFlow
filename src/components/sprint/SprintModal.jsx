@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { X, Calendar, Palette } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
+import { useNotifications } from '../../hooks/useNotifications'
 import DatePicker from '../ui/DatePicker'
 import { cn } from '../../lib/utils'
 
@@ -12,7 +14,9 @@ const SPRINT_COLORS = [
 
 export default function SprintModal({ isOpen, onClose }) {
   const { state } = useApp()
+  const { user } = useAuth()
   const { createSprint } = useSupabase()
+  const { notifyNewSprint } = useNotifications()
   const [form, setForm] = useState({
     name: '',
     start_date: '',
@@ -25,11 +29,19 @@ export default function SprintModal({ isOpen, onClose }) {
 
   const handleSave = async () => {
     if (!form.name.trim()) return
-    await createSprint({
+    const { data: newSprint } = await createSprint({
       ...form,
       board_id: state.currentBoard.id,
       status: 'active',
     })
+    if (newSprint) {
+      notifyNewSprint({
+        sprint: newSprint,
+        boardMembers: state.orgMembers,
+        fromUser: user,
+        workspaceId: state.currentWorkspace?.id,
+      })
+    }
     setForm({ name: '', start_date: '', end_date: '', color: '#6c5ce7', goal: '' })
     onClose()
   }
