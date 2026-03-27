@@ -48,13 +48,23 @@ export default function NotificationCenter() {
 
   const loadAll = async () => {
     setLoading(true)
+
+    // Clean up notifications read more than 10 days ago
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()
+    await supabase
+      .from('notifications')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('read', true)
+      .lt('created_at', tenDaysAgo)
+
     const [notifResult, inviteResult] = await Promise.all([
       supabase
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-        .limit(30),
+        .limit(50),
       fetchMyInvites(user.email),
     ])
     if (notifResult.data) setNotifications(notifResult.data)
@@ -244,34 +254,49 @@ export default function NotificationCenter() {
                   const config = TYPE_CONFIG[notif.type] || TYPE_CONFIG.task_assigned
                   const Icon = config.icon
                   return (
-                    <button
+                    <div
                       key={notif.id}
-                      onClick={() => handleNotificationClick(notif)}
                       className={cn(
-                        'w-full px-4 py-3 border-b border-border text-left transition-colors flex items-start gap-3',
+                        'px-4 py-3 border-b border-border transition-colors flex items-start gap-3 group',
                         notif.read ? 'hover:bg-accent/30' : 'bg-primary/5 hover:bg-accent/30'
                       )}
                     >
-                      {notif.from_user_avatar ? (
-                        <img src={notif.from_user_avatar} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
+                      <button
+                        onClick={() => handleNotificationClick(notif)}
+                        className="flex items-start gap-3 flex-1 min-w-0 text-left"
+                      >
+                        {notif.from_user_avatar ? (
+                          <img src={notif.from_user_avatar} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
+                        ) : (
+                          <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center shrink-0', config.bg)}>
+                            <Icon className={cn('w-4 h-4', config.color)} />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className={cn('text-sm truncate', notif.read ? 'text-foreground' : 'text-foreground font-semibold')}>
+                              {notif.title}
+                            </p>
+                            <span className="text-[10px] text-muted-foreground shrink-0">{timeAgo(notif.created_at)}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{notif.message}</p>
+                          {notif.from_user_name && (
+                            <p className="text-[10px] text-muted-foreground/70 mt-0.5">Por: {notif.from_user_name}</p>
+                          )}
+                        </div>
+                      </button>
+                      {!notif.read ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); markAsRead(notif.id) }}
+                          className="p-1 rounded-md hover:bg-accent text-primary shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Marcar como leída"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
                       ) : (
-                        <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center shrink-0', config.bg)}>
-                          <Icon className={cn('w-4 h-4', config.color)} />
-                        </div>
+                        <div className="w-6 shrink-0" />
                       )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className={cn('text-sm truncate', notif.read ? 'text-foreground' : 'text-foreground font-medium')}>
-                            {notif.title}
-                          </p>
-                          <span className="text-[10px] text-muted-foreground shrink-0">{timeAgo(notif.created_at)}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{notif.message}</p>
-                      </div>
-                      {!notif.read && (
-                        <div className="w-2 h-2 rounded-full bg-primary shrink-0 mt-2" />
-                      )}
-                    </button>
+                    </div>
                   )
                 })}
               </>

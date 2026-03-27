@@ -158,8 +158,8 @@ export default function TaskSidePanel() {
           className="w-full text-2xl font-bold bg-transparent text-foreground border-0 focus:outline-none placeholder:text-muted-foreground/40 mb-5 resize-none overflow-hidden leading-tight"
         />
 
-        {/* Properties */}
-        <div className="space-y-1 mb-6 pb-6 border-b border-border">
+        {/* Properties — 2-column grid */}
+        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 mb-6 pb-6 border-b border-border">
           {/* Responsable */}
           <PropRow icon={User} label="Responsable">
             <Select
@@ -281,7 +281,7 @@ export default function TaskSidePanel() {
           </PropRow>
 
           {/* Etiquetas */}
-          <PropRow icon={Paperclip} label="Etiquetas">
+          <PropRow icon={Paperclip} label="Etiquetas" span>
             <input
               defaultValue={task.tags || ''}
               onBlur={(e) => handleFieldUpdate({ tags: e.target.value })}
@@ -378,7 +378,7 @@ export default function TaskSidePanel() {
           })}
 
           {task.created_at && (
-            <PropRow icon={Clock} label="Creada">
+            <PropRow icon={Clock} label="Creada" span>
               <span className="text-sm text-muted-foreground px-1">
                 {new Date(task.created_at).toLocaleDateString('es', {
                   day: 'numeric', month: 'short', year: 'numeric',
@@ -475,13 +475,11 @@ function CustomFieldInput({ type, defaultValue, hasValue, onSave }) {
   )
 }
 
-function PropRow({ icon: Icon, label, children }) {
+function PropRow({ icon: Icon, label, children, span }) {
   return (
-    <div className="flex items-center gap-3 min-h-[36px] hover:bg-accent/20 rounded-lg px-1 -mx-1 transition-colors">
-      <div className="flex items-center gap-2 w-28 shrink-0">
-        <Icon className="w-4 h-4 text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">{label}</span>
-      </div>
+    <div className={`flex items-center gap-2 min-h-[34px] hover:bg-accent/20 rounded-lg px-1.5 transition-colors ${span ? 'col-span-2' : ''}`}>
+      <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+      <span className="text-xs text-muted-foreground shrink-0 w-20">{label}</span>
       <div className="flex-1 min-w-0">{children}</div>
     </div>
   )
