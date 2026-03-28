@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   X, Calendar, User, Flag, Tag, Layers, Clock,
-  Trash2, Paperclip, MoreHorizontal, Check,
+  Trash2, Paperclip, MoreHorizontal, Check, Loader2,
   Type, Hash, DollarSign, ChevronDown,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
@@ -31,6 +31,8 @@ export default function TaskSidePanel() {
   const [description, setDescription] = useState('')
   const [pendingCFValues, setPendingCFValues] = useState({})
   const [activityKey, setActivityKey] = useState(0)
+  const [saveStatus, setSaveStatus] = useState(null) // null | 'saving' | 'saved'
+  const saveTimerRef = useRef(null)
 
   const logActivity = useCallback((action, oldValue, newValue) => {
     if (!task?.id || isNew) return
@@ -71,8 +73,14 @@ export default function TaskSidePanel() {
   const sprint = state.sprints.find(s => s.id === task.sprint_id)
   const assignee = assignableUsers.find(u => u.id === task.assignee_id)
 
+  const showSaving = () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    setSaveStatus('saving')
+  }
+
   const showSaved = () => {
-    toast.success('Guardado')
+    setSaveStatus('saved')
+    saveTimerRef.current = setTimeout(() => setSaveStatus(null), 2500)
   }
 
   const handleFieldUpdate = async (updates) => {
@@ -80,6 +88,7 @@ export default function TaskSidePanel() {
       dispatch({ type: 'OPEN_SIDE_PANEL', payload: { ...task, ...updates } })
       return
     }
+    showSaving()
     await updateTask(task.id, updates)
     showSaved()
   }
@@ -87,6 +96,7 @@ export default function TaskSidePanel() {
   const handleTitleBlur = async () => {
     if (isNew || !title.trim() || title.trim() === task.title) return
     const oldTitle = task.title
+    showSaving()
     await updateTask(task.id, { title: title.trim() })
     logActivity('title_changed', oldTitle, title.trim())
     showSaved()
@@ -94,6 +104,7 @@ export default function TaskSidePanel() {
 
   const handleDescBlur = async () => {
     if (isNew || description === task.description) return
+    showSaving()
     await updateTask(task.id, { description })
     showSaved()
   }
@@ -148,7 +159,20 @@ export default function TaskSidePanel() {
     <div className="fixed top-0 right-0 h-screen w-[50vw] max-w-[1000px] min-w-[500px] z-40 flex flex-col bg-card border-l border-border shadow-2xl animate-slide-in-right overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-        <div className="flex items-center gap-2" />
+        <div className="flex items-center gap-2">
+          {saveStatus === 'saving' && (
+            <div className="flex items-center gap-1.5 text-muted-foreground animate-pulse">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span className="text-xs">Guardando...</span>
+            </div>
+          )}
+          {saveStatus === 'saved' && (
+            <div className="flex items-center gap-1.5 text-emerald-500">
+              <Check className="w-3.5 h-3.5" />
+              <span className="text-xs font-medium">Autoguardado</span>
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-1">
           {!isNew && (
             <button
@@ -464,7 +488,10 @@ export default function TaskSidePanel() {
             value={task.description || ''}
             onChange={(val) => {
               setDescription(val)
-              if (!isNew && task.id) updateTask(task.id, { description: val })
+              if (!isNew && task.id) {
+                showSaving()
+                updateTask(task.id, { description: val }).then(() => showSaved())
+              }
             }}
             placeholder="Proporciona un resumen general de la tarea..."
           />

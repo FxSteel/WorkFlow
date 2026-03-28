@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { Plus, ChevronDown, ChevronRight, Zap, MoreHorizontal, Pencil, Trash2, Calendar, Palette, AlertTriangle } from 'lucide-react'
+import { Plus, ChevronDown, ChevronRight, Zap, MoreHorizontal, Pencil, Trash2, Calendar, Palette, AlertTriangle, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
@@ -341,7 +341,7 @@ function InlineNewTaskRow({ gridTemplate, orderedCols, isColVisible, title, setT
   const colOrder = {}
   orderedCols.forEach((col, i) => { colOrder[col.key] = i + 1 })
 
-  return (
+  return (<>
     <div
       className="grid gap-0 border-t border-border bg-primary/5 text-sm"
       style={{ gridTemplateColumns: gridTemplate }}
@@ -370,7 +370,22 @@ function InlineNewTaskRow({ gridTemplate, orderedCols, isColVisible, title, setT
       ))}
       <div style={{ order: orderedCols.length + 1 }} className="py-2.5 px-2" />
     </div>
-  )
+    <div className="flex items-center gap-2 px-3 py-1.5 border-t border-border bg-muted/30">
+      <button
+        onClick={onSubmit}
+        disabled={!title.trim()}
+        className="px-3 py-1 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-30 transition-colors"
+      >
+        Crear tarea
+      </button>
+      <button
+        onClick={onCancel}
+        className="px-3 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        Cancelar
+      </button>
+    </div>
+  </>)
 }
 
 function TableView({
@@ -809,8 +824,8 @@ function TableView({
         )
       })}
 
-      {/* Tasks without sprint */}
-      {unassignedTasks.length > 0 && (
+      {/* Tasks without sprint — always visible */}
+      {(
         <div
           className={cn(
             'mb-6 animate-fade-in rounded-lg transition-all',
