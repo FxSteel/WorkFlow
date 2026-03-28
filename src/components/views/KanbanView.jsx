@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { Plus } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import { cn } from '../../lib/utils'
 import { PRIORITY_CONFIG } from '../../lib/constants'
@@ -8,8 +9,9 @@ import EmptyState from '../ui/EmptyState'
 
 export default function KanbanView({ isColVisible = () => true, filteredTasks }) {
   const { state, dispatch, openTask } = useApp()
+  const { user } = useAuth()
   const tasks = filteredTasks || tasks
-  const { updateTask, createTask } = useSupabase()
+  const { updateTask, createTask, logTaskActivity } = useSupabase()
   const [addingTo, setAddingTo] = useState(null)
   const [newTitle, setNewTitle] = useState('')
   const [draggedTask, setDraggedTask] = useState(null)
@@ -116,6 +118,12 @@ export default function KanbanView({ isColVisible = () => true, filteredTasks })
 
       await updateTask(draggedTask.id, { status, position: adjustedIdx })
       await Promise.all(updates.map(u => updateTask(u.id, { position: u.position })))
+      logTaskActivity({
+        taskId: draggedTask.id, userId: user?.id,
+        userName: user?.user_metadata?.full_name || user?.email?.split('@')[0] || '',
+        userAvatar: user?.user_metadata?.avatar_url,
+        action: 'status_changed', oldValue: draggedTask.status, newValue: status,
+      })
     }
     handleDragEnd()
   }
@@ -185,6 +193,9 @@ export default function KanbanView({ isColVisible = () => true, filteredTasks })
                           : 'hover:shadow-md hover:-translate-y-0.5'
                       )}
                     >
+                      {task.parent_task_id && (
+                        <span className="inline-block text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded mb-1.5">↳ Subtarea</span>
+                      )}
                       <p className="text-sm font-medium text-foreground mb-2 line-clamp-2">{task.title}</p>
                       <div className="flex items-center gap-2 flex-wrap">
                         {isColVisible('priority') && (

@@ -12,9 +12,11 @@ import {
   Type, Heading1, Heading2, Heading3, List, ListOrdered,
   CheckSquare, Quote, Minus, Code, Plus, ChevronDown, Copy, Check,
   Image as ImageIcon, Video, Volume2, FileText, Loader2,
+  X, Maximize2, Download, ExternalLink, Trash2,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
+import { toast } from 'sonner'
 
 const lowlight = createLowlight(common)
 
@@ -43,6 +45,170 @@ const LANGUAGES = [
   { value: 'markdown', label: 'Markdown' },
   { value: 'graphql', label: 'GraphQL' },
 ]
+
+function ImageNodeView({ node, deleteNode }) {
+  const { src, alt } = node.attrs
+  const [preview, setPreview] = useState(false)
+  const [ctxMenu, setCtxMenu] = useState(null) // { x, y }
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    if (!ctxMenu) return
+    const close = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setCtxMenu(null)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [ctxMenu])
+
+  const copyImage = async () => {
+    setCtxMenu(null)
+    try {
+      const res = await fetch(src)
+      const blob = await res.blob()
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
+      toast.success('Imagen copiada al portapapeles')
+    } catch {
+      // Fallback: copy URL
+      await navigator.clipboard.writeText(src)
+      toast.success('URL copiada al portapapeles')
+    }
+  }
+
+  const downloadImage = async () => {
+    setCtxMenu(null)
+    try {
+      const res = await fetch(src)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = alt || 'imagen'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      window.open(src, '_blank')
+    }
+  }
+
+  const openInBrowser = () => {
+    setCtxMenu(null)
+    window.open(src, '_blank', 'noopener,noreferrer')
+  }
+
+  const handleDelete = () => {
+    setCtxMenu(null)
+    deleteNode()
+  }
+
+  const MENU_ITEMS = [
+    { icon: Maximize2, label: 'Vista previa', action: () => { setCtxMenu(null); setPreview(true) } },
+    { icon: Copy, label: 'Copiar imagen', action: copyImage },
+    { icon: Download, label: 'Descargar', action: downloadImage },
+    { icon: ExternalLink, label: 'Abrir en navegador', action: openInBrowser },
+    { divider: true },
+    { icon: Trash2, label: 'Eliminar', action: handleDelete, danger: true },
+  ]
+
+  return (
+    <NodeViewWrapper>
+      <div
+        className="relative group my-1"
+        onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY }) }}
+      >
+        <img
+          src={src}
+          alt={alt || ''}
+          onClick={() => setPreview(true)}
+          className="max-w-full rounded-lg cursor-pointer block"
+          draggable={false}
+        />
+
+        {/* Hover toolbar */}
+        <div className="absolute top-2 right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 backdrop-blur-sm rounded-lg p-1">
+          {[
+            { Icon: Maximize2, label: 'Vista previa', fn: () => setPreview(true) },
+            { Icon: Copy, label: 'Copiar', fn: copyImage },
+            { Icon: Download, label: 'Descargar', fn: downloadImage },
+            { Icon: ExternalLink, label: 'Abrir en navegador', fn: openInBrowser },
+          ].map(({ Icon, label, fn }) => (
+            <button key={label} onClick={fn} title={label} className="p-1.5 rounded-md text-white hover:bg-white/20 transition-colors">
+              <Icon className="w-3.5 h-3.5" />
+            </button>
+          ))}
+          <div className="w-px h-4 bg-white/30 mx-0.5" />
+          <button onClick={handleDelete} title="Eliminar" className="p-1.5 rounded-md text-red-400 hover:bg-white/20 transition-colors">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Full-screen preview */}
+      {preview && createPortal(
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center bg-black/85 animate-fade-in"
+          onClick={() => setPreview(false)}
+        >
+          <div className="relative max-w-[92vw] max-h-[92vh]" onClick={e => e.stopPropagation()}>
+            <img
+              src={src}
+              alt={alt || ''}
+              className="max-w-full max-h-[92vh] rounded-xl shadow-2xl object-contain"
+            />
+            {/* Preview actions */}
+            <div className="absolute top-3 right-3 flex items-center gap-1.5">
+              {[
+                { Icon: Copy, label: 'Copiar', fn: copyImage },
+                { Icon: Download, label: 'Descargar', fn: downloadImage },
+                { Icon: ExternalLink, label: 'Abrir en navegador', fn: openInBrowser },
+              ].map(({ Icon, label, fn }) => (
+                <button key={label} onClick={fn} title={label} className="p-2 rounded-lg bg-black/50 text-white hover:bg-black/70 transition-colors">
+                  <Icon className="w-4 h-4" />
+                </button>
+              ))}
+              <button onClick={() => setPreview(false)} title="Cerrar" className="p-2 rounded-lg bg-black/50 text-white hover:bg-black/70 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Right-click context menu */}
+      {ctxMenu && createPortal(
+        <div
+          ref={menuRef}
+          className="fixed z-[300] w-52 rounded-xl border border-border bg-popover shadow-xl py-1.5 animate-scale-in"
+          style={{ top: ctxMenu.y, left: ctxMenu.x }}
+        >
+          {MENU_ITEMS.map((item, i) =>
+            item.divider ? (
+              <div key={i} className="border-t border-border my-1" />
+            ) : (
+              <button
+                key={item.label}
+                onClick={item.action}
+                className={cn(
+                  'w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-colors',
+                  item.danger
+                    ? 'text-destructive hover:bg-destructive/10'
+                    : 'text-foreground hover:bg-accent'
+                )}
+              >
+                <item.icon className="w-4 h-4 shrink-0" />
+                {item.label}
+              </button>
+            )
+          )}
+        </div>,
+        document.body
+      )}
+    </NodeViewWrapper>
+  )
+}
 
 function CodeBlockComponent({ node, updateAttributes, extension }) {
   const [showLangs, setShowLangs] = useState(false)
@@ -196,7 +362,11 @@ export default function BlockEditor({ value, onChange, placeholder }) {
       }),
       TaskList,
       TaskItem.configure({ nested: true }),
-      ImageExt.configure({ inline: false }),
+      ImageExt.extend({
+        addNodeView() {
+          return ReactNodeViewRenderer(ImageNodeView)
+        },
+      }).configure({ inline: false }),
     ],
     content: getInitialContent(),
     editorProps: {

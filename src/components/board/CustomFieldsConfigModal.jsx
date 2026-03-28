@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Plus, Trash2, Type, Hash, Calendar, ChevronDown, DollarSign, Pencil, ArrowUp, ArrowDown, Share2, Search, Smile } from 'lucide-react'
+import { X, Plus, Trash2, Type, Hash, Calendar, ChevronDown, DollarSign, Pencil, Share2, Search, Smile, GripVertical } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import { supabase } from '../../lib/supabase'
@@ -139,6 +139,8 @@ export default function CustomFieldsConfigModal({ open, onClose, boardId: propBo
   const [selectedBoards, setSelectedBoards] = useState([])
   const [sharingLoading, setSharingLoading] = useState(false)
   const iconBtnRef = useRef(null)
+  const [dragFieldIdx, setDragFieldIdx] = useState(null)
+  const [dropFieldIndicator, setDropFieldIndicator] = useState(null)
 
   const boardId = propBoardId || state.currentBoard?.id
   const [localFields, setLocalFields] = useState([])
@@ -250,20 +252,37 @@ export default function CustomFieldsConfigModal({ open, onClose, boardId: propBo
     setForm(prev => ({ ...prev, options: prev.options.filter((_, i) => i !== idx) }))
   }
 
-  const moveField = (idx, direction) => {
-    const targetIdx = idx + direction
-    if (targetIdx < 0 || targetIdx >= fields.length) return
-    const a = fields[idx]
-    const b = fields[targetIdx]
-    // Optimistic: swap in local state immediately
-    const reordered = [...fields]
-    reordered[idx] = { ...b, position: idx }
-    reordered[targetIdx] = { ...a, position: targetIdx }
-    dispatch({ type: 'SET_CUSTOM_FIELDS', payload: reordered })
-    // Save to DB in background
-    updateCustomField(a.id, { position: targetIdx })
-    updateCustomField(b.id, { position: idx })
+  const handleFieldDragStart = (e, idx) => {
+    setDragFieldIdx(idx)
+    e.dataTransfer.effectAllowed = 'move'
   }
+  const handleFieldDragOver = (e, idx) => {
+    e.preventDefault()
+    if (dragFieldIdx === null || dragFieldIdx === idx) {
+      // If hovering over self, still calculate for above/below
+      if (dragFieldIdx === idx) { setDropFieldIndicator(null); return }
+    }
+    const rect = e.currentTarget.getBoundingClientRect()
+    const isTop = (e.clientY - rect.top) < rect.height / 2
+    setDropFieldIndicator(isTop ? idx : idx + 1)
+  }
+  const handleFieldDrop = () => {
+    if (dragFieldIdx === null || dropFieldIndicator === null) { setDragFieldIdx(null); setDropFieldIndicator(null); return }
+    let toIdx = dropFieldIndicator
+    if (dragFieldIdx < toIdx) toIdx--
+    if (dragFieldIdx === toIdx) { setDragFieldIdx(null); setDropFieldIndicator(null); return }
+
+    const reordered = [...fields]
+    const [moved] = reordered.splice(dragFieldIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    const updated = reordered.map((f, i) => ({ ...f, position: i }))
+    dispatch({ type: 'SET_CUSTOM_FIELDS', payload: updated })
+    // Save all positions to DB
+    updated.forEach(f => updateCustomField(f.id, { position: f.position }))
+    setDragFieldIdx(null)
+    setDropFieldIndicator(null)
+  }
+  const handleFieldDragEnd = () => { setDragFieldIdx(null); setDropFieldIndicator(null) }
 
   const startShare = async (field) => {
     setShareField(field)
@@ -335,32 +354,27 @@ export default function CustomFieldsConfigModal({ open, onClose, boardId: propBo
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {mode === 'list' && (
-            <div className="space-y-1.5">
+            <div>
               {fields.map((field, idx) => {
                 const TypeIcon = FIELD_TYPES.find(t => t.value === field.type)?.icon || Type
                 const FieldIcon = resolveFieldIcon(field.icon, TypeIcon)
                 return (
-                  <div
-                    key={field.id}
-                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-muted/50 group transition-colors"
-                  >
-                    <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => moveField(idx, -1)}
-                        disabled={idx === 0}
-                        className="p-0.5 rounded hover:bg-accent text-muted-foreground disabled:opacity-20"
-                      >
-                        <ArrowUp className="w-2.5 h-2.5" />
-                      </button>
-                      <button
-                        onClick={() => moveField(idx, 1)}
-                        disabled={idx === fields.length - 1}
-                        className="p-0.5 rounded hover:bg-accent text-muted-foreground disabled:opacity-20"
-                      >
-                        <ArrowDown className="w-2.5 h-2.5" />
-                      </button>
-                    </div>
-                    <FieldIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <div key={field.id}>
+                    {dropFieldIndicator === idx && (
+                      <div className="h-0.5 bg-[#000000] rounded-full mx-3 my-0.5" />
+                    )}
+                    <div
+                      draggable
+                      onDragStart={(e) => handleFieldDragStart(e, idx)}
+                      onDragOver={(e) => handleFieldDragOver(e, idx)}
+                      onDrop={handleFieldDrop}
+                      onDragEnd={handleFieldDragEnd}
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-muted/50 group transition-colors ${
+                        dragFieldIdx === idx ? 'opacity-40' : ''
+                      }`}
+                    >
+                      <GripVertical className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing shrink-0 transition-opacity" />
+                      <FieldIcon className="w-4 h-4 text-muted-foreground shrink-0" />
                     <span className="text-sm font-medium text-foreground flex-1 truncate">{field.name}</span>
                     <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
                       {FIELD_TYPES.find(t => t.value === field.type)?.label}
@@ -386,9 +400,13 @@ export default function CustomFieldsConfigModal({ open, onClose, boardId: propBo
                     >
                       <Share2 className="w-3 h-3" />
                     </button>
+                    </div>
                   </div>
                 )
               })}
+              {dropFieldIndicator === fields.length && (
+                <div className="h-0.5 bg-[#000000] rounded-full mx-3 my-0.5" />
+              )}
 
               {fields.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-8">No hay campos personalizados.</p>

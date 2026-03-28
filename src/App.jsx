@@ -154,7 +154,7 @@ function AppContent() {
     const taskData = {
       title: '',
       description: '',
-      status: 'Por hacer',
+      status: 'Backlog',
       priority: 'medium',
       sprint_id: state.sprints.length > 0 ? state.sprints[0].id : null,
     }

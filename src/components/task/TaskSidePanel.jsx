@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   X, Calendar, User, Flag, Tag, Layers, Clock,
   Trash2, Paperclip, MoreHorizontal, Check,
@@ -10,6 +10,8 @@ import { useSupabase } from '../../hooks/useSupabase'
 import DatePicker from '../ui/DatePicker'
 import BlockEditor from '../ui/BlockEditor'
 import TaskComments from './TaskComments'
+import TaskActivity from './TaskActivity'
+import TaskSubtasks from './TaskSubtasks'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select'
 import { cn } from '../../lib/utils'
 import { STATUS_OPTIONS, STATUS_COLORS, PRIORITY_OPTIONS } from '../../lib/constants'
@@ -21,13 +23,27 @@ export default function TaskSidePanel() {
   const { state, dispatch, closeSidePanel } = useApp()
   const { user } = useAuth()
   const { notifyTaskAssigned, notifyStatusChange, notifyPriorityChange, notifyTaskCompleted } = useNotifications()
-  const { updateTask, deleteTask, createTask, setCustomFieldValue } = useSupabase()
+  const { updateTask, deleteTask, createTask, setCustomFieldValue, logTaskActivity } = useSupabase()
   const task = state.sidePanelTask
   const isNew = task && !task.id
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [pendingCFValues, setPendingCFValues] = useState({})
+  const [activityKey, setActivityKey] = useState(0)
+
+  const logActivity = useCallback((action, oldValue, newValue) => {
+    if (!task?.id || isNew) return
+    logTaskActivity({
+      taskId: task.id,
+      userId: user?.id,
+      userName: user?.user_metadata?.full_name || user?.email?.split('@')[0] || '',
+      userAvatar: user?.user_metadata?.avatar_url,
+      action,
+      oldValue: oldValue ?? null,
+      newValue: newValue ?? null,
+    }).then(() => setActivityKey(k => k + 1))
+  }, [task?.id, user, logTaskActivity])
 
   const assignableUsers = useMemo(() => {
     return state.orgMembers.map(m => ({
@@ -60,7 +76,6 @@ export default function TaskSidePanel() {
   }
 
   const handleFieldUpdate = async (updates) => {
-    // For new tasks, update local state only
     if (isNew) {
       dispatch({ type: 'OPEN_SIDE_PANEL', payload: { ...task, ...updates } })
       return
@@ -71,7 +86,9 @@ export default function TaskSidePanel() {
 
   const handleTitleBlur = async () => {
     if (isNew || !title.trim() || title.trim() === task.title) return
+    const oldTitle = task.title
     await updateTask(task.id, { title: title.trim() })
+    logActivity('title_changed', oldTitle, title.trim())
     showSaved()
   }
 
@@ -92,7 +109,7 @@ export default function TaskSidePanel() {
     const { data: newTask } = await createTask({
       title: title.trim(),
       description,
-      status: task.status || 'Por hacer',
+      status: task.status || 'Backlog',
       priority: task.priority || 'medium',
       assignee_id: task.assignee_id || null,
       assignee_name: task.assignee_name || '',
@@ -102,13 +119,23 @@ export default function TaskSidePanel() {
       board_id: state.currentBoard.id,
       position: state.tasks.length,
     })
-    // Save pending custom field values
-    if (newTask?.id && Object.keys(pendingCFValues).length > 0) {
-      await Promise.all(
-        Object.entries(pendingCFValues).map(([fieldId, { fieldType, value }]) =>
-          setCustomFieldValue(newTask.id, fieldId, fieldType, value)
+    if (newTask?.id) {
+      logTaskActivity({
+        taskId: newTask.id,
+        userId: user?.id,
+        userName: user?.user_metadata?.full_name || user?.email?.split('@')[0] || '',
+        userAvatar: user?.user_metadata?.avatar_url,
+        action: 'created',
+        oldValue: null,
+        newValue: null,
+      })
+      if (Object.keys(pendingCFValues).length > 0) {
+        await Promise.all(
+          Object.entries(pendingCFValues).map(([fieldId, { fieldType, value }]) =>
+            setCustomFieldValue(newTask.id, fieldId, fieldType, value)
+          )
         )
-      )
+      }
     }
     toast.success('Tarea creada')
     closeSidePanel()
@@ -118,7 +145,7 @@ export default function TaskSidePanel() {
     <>
     {/* Backdrop */}
     <div className="fixed inset-0 z-30" onClick={closeSidePanel} />
-    <div className="fixed top-0 right-0 h-screen w-[60vw] max-w-[800px] min-w-[500px] z-40 flex flex-col bg-card border-l border-border shadow-2xl animate-slide-in-right overflow-hidden">
+    <div className="fixed top-0 right-0 h-screen w-[50vw] max-w-[1000px] min-w-[500px] z-40 flex flex-col bg-card border-l border-border shadow-2xl animate-slide-in-right overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-border">
         <div className="flex items-center gap-2" />
@@ -159,6 +186,20 @@ export default function TaskSidePanel() {
           className="w-full text-2xl font-bold bg-transparent text-foreground border-0 focus:outline-none placeholder:text-muted-foreground/40 mb-5 resize-none overflow-hidden leading-tight"
         />
 
+        {/* Parent task reference */}
+        {task.parent_task_id && (() => {
+          const parent = state.tasks.find(t => t.id === task.parent_task_id)
+          return parent ? (
+            <button
+              onClick={() => dispatch({ type: 'OPEN_SIDE_PANEL', payload: parent })}
+              className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-sm w-full text-left"
+            >
+              <span className="text-muted-foreground">↳ Subtarea de</span>
+              <span className="font-medium text-primary truncate">{parent.title}</span>
+            </button>
+          ) : null
+        })()}
+
         {/* Properties — 2-column grid */}
         <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 mb-6 pb-6 border-b border-border">
           {/* Responsable */}
@@ -167,10 +208,12 @@ export default function TaskSidePanel() {
               value={task.assignee_id || '_none'}
               onValueChange={(val) => {
                 const member = assignableUsers.find(u => u.id === val)
+                const oldName = assignee?.name || null
                 handleFieldUpdate({
                   assignee_id: val === '_none' ? null : val,
                   assignee_name: member?.name || '',
                 })
+                logActivity('assignee_changed', oldName, member?.name || null)
                 if (val !== '_none' && member) {
                   const dbMember = state.orgMembers.find(m => m.id === val)
                   notifyTaskAssigned({ task, assigneeMember: dbMember, fromUser: user, workspaceId: state.currentWorkspace?.id })
@@ -207,9 +250,10 @@ export default function TaskSidePanel() {
           {/* Estado */}
           <PropRow icon={Tag} label="Estado">
             <Select
-              value={task.status || (state.boardStatuses?.[0]?.name || 'Por hacer')}
+              value={task.status || (state.boardStatuses?.[0]?.name || 'Backlog')}
               onValueChange={(val) => {
                 handleFieldUpdate({ status: val })
+                logActivity('status_changed', task.status, val)
                 if (task.assignee_id) {
                   const member = state.orgMembers.find(m => m.id === task.assignee_id)
                   if (member) {
@@ -248,7 +292,7 @@ export default function TaskSidePanel() {
           <PropRow icon={Calendar} label="Fecha límite">
             <DatePicker
               value={task.due_date || ''}
-              onChange={(val) => handleFieldUpdate({ due_date: val || null })}
+              onChange={(val) => { handleFieldUpdate({ due_date: val || null }); logActivity('due_date_changed', task.due_date, val || null) }}
               placeholder="Vacío"
               size="sm"
               className="border-0 bg-transparent hover:bg-accent"
@@ -261,6 +305,7 @@ export default function TaskSidePanel() {
               value={task.priority || 'medium'}
               onValueChange={(val) => {
                 handleFieldUpdate({ priority: val })
+                logActivity('priority_changed', task.priority, val)
                 if (task.assignee_id) {
                   const member = state.orgMembers.find(m => m.id === task.assignee_id)
                   if (member) {
@@ -289,7 +334,12 @@ export default function TaskSidePanel() {
           <PropRow icon={Layers} label="Sprint">
             <Select
               value={task.sprint_id || '_none'}
-              onValueChange={(val) => handleFieldUpdate({ sprint_id: val === '_none' ? null : val })}
+              onValueChange={(val) => {
+                handleFieldUpdate({ sprint_id: val === '_none' ? null : val })
+                const oldSprint = sprint?.name || null
+                const newSprint = state.sprints.find(s => s.id === val)?.name || null
+                logActivity('sprint_changed', oldSprint, newSprint)
+              }}
             >
               <SelectTrigger className="border-0 bg-transparent h-7 px-1 text-sm hover:bg-accent w-auto">
                 <SelectValue placeholder="Sin asignar" />
@@ -305,11 +355,9 @@ export default function TaskSidePanel() {
 
           {/* Etiquetas */}
           <PropRow icon={Paperclip} label="Etiquetas" span>
-            <input
-              defaultValue={task.tags || ''}
-              onBlur={(e) => handleFieldUpdate({ tags: e.target.value })}
-              placeholder="frontend, bug..."
-              className="text-sm bg-transparent text-foreground focus:outline-none placeholder:text-muted-foreground/50 flex-1 hover:bg-accent/30 rounded px-1 transition-colors"
+            <TagsInput
+              value={task.tags || ''}
+              onChange={(val) => handleFieldUpdate({ tags: val })}
             />
           </PropRow>
 
@@ -340,10 +388,7 @@ export default function TaskSidePanel() {
                       {selectedOpt ? (
                         <span className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white" style={{ backgroundColor: selectedOpt.color }}>{selectedOpt.label}</span>
                       ) : (
-                        <span className="text-muted-foreground flex items-center gap-1.5">
-                          <ChevronDown className="w-3.5 h-3.5" />
-                          Vacío
-                        </span>
+                        <span className="text-muted-foreground">Vacío</span>
                       )}
                     </SelectTrigger>
                     <SelectContent>
@@ -412,15 +457,8 @@ export default function TaskSidePanel() {
           )}
         </div>
 
-        {/* Comments */}
-        {!isNew && (
-          <div className="mb-6 pb-6 border-b border-border">
-            <TaskComments taskId={task.id} />
-          </div>
-        )}
-
         {/* Description */}
-        <div>
+        <div className="mb-6 pb-6 border-b border-border">
           <h4 className="text-lg font-semibold text-foreground mb-3">Descripción de la tarea</h4>
           <BlockEditor
             value={task.description || ''}
@@ -431,6 +469,31 @@ export default function TaskSidePanel() {
             placeholder="Proporciona un resumen general de la tarea..."
           />
         </div>
+
+        {/* Subtasks */}
+        {!isNew && (
+          <div className="mb-6 pb-6 border-b border-border">
+            <TaskSubtasks
+              taskId={task.id}
+              boardId={task.board_id || state.currentBoard?.id}
+              onActivity={(action, oldVal, newVal) => logActivity(action, oldVal, newVal)}
+            />
+          </div>
+        )}
+
+        {/* Comments */}
+        {!isNew && (
+          <div className="mb-6 pb-6 border-b border-border">
+            <TaskComments taskId={task.id} />
+          </div>
+        )}
+
+        {/* Activity log */}
+        {!isNew && (
+          <div className="mb-6">
+            <TaskActivity key={activityKey} taskId={task.id} />
+          </div>
+        )}
       </div>
 
       {/* Footer for new tasks */}
@@ -494,6 +557,47 @@ function CustomFieldInput({ type, defaultValue, hasValue, onSave }) {
         maxLength={type === 'text' ? 30 : undefined}
         className="text-sm bg-transparent text-foreground focus:outline-none placeholder:text-muted-foreground/50 flex-1 bg-accent/30 rounded px-1.5 py-0.5"
         autoFocus
+      />
+    </div>
+  )
+}
+
+function TagsInput({ value, onChange }) {
+  const [input, setInput] = useState('')
+  const tags = value ? value.split(',').map(t => t.trim()).filter(Boolean) : []
+
+  const addTag = () => {
+    const tag = input.trim()
+    if (!tag || tags.includes(tag)) { setInput(''); return }
+    const updated = [...tags, tag].join(', ')
+    onChange(updated)
+    setInput('')
+  }
+
+  const removeTag = (idx) => {
+    const updated = tags.filter((_, i) => i !== idx).join(', ')
+    onChange(updated || null)
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {tags.map((tag, i) => (
+        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium">
+          {tag}
+          <button onClick={() => removeTag(i)} className="hover:text-destructive transition-colors">
+            <X className="w-2.5 h-2.5" />
+          </button>
+        </span>
+      ))}
+      <input
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); addTag() }
+          if (e.key === 'Backspace' && !input && tags.length > 0) removeTag(tags.length - 1)
+        }}
+        placeholder={tags.length === 0 ? 'Agregar etiqueta...' : '+'}
+        className="text-xs bg-transparent text-foreground focus:outline-none placeholder:text-muted-foreground/50 min-w-[60px] flex-1 px-1 py-0.5"
       />
     </div>
   )

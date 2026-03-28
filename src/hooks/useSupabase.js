@@ -656,6 +656,69 @@ export function useSupabase() {
     return result
   }, [dispatch])
 
+  // --- Task Activity Log ---
+
+  const logTaskActivity = useCallback(async ({ taskId, userId, userName, userAvatar, action, oldValue, newValue }) => {
+    if (!taskId || !userId) return
+    await supabase.from('task_activity').insert({
+      task_id: taskId,
+      user_id: userId,
+      user_name: userName || '',
+      user_avatar: userAvatar || null,
+      action,
+      old_value: oldValue || null,
+      new_value: newValue || null,
+    })
+  }, [])
+
+  const fetchTaskActivity = useCallback(async (taskId) => {
+    const { data, error } = await supabase
+      .from('task_activity')
+      .select('*')
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: false })
+      .limit(50)
+    return { data: data || [], error }
+  }, [])
+
+  // --- Subtasks ---
+
+  const fetchSubtasks = useCallback(async (parentTaskId) => {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('parent_task_id', parentTaskId)
+      .order('position', { ascending: true })
+    return { data: data || [], error }
+  }, [])
+
+  const createSubtask = useCallback(async (subtask) => {
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert(subtask)
+      .select()
+      .single()
+    if (!error && data) dispatch({ type: 'ADD_TASK', payload: data })
+    return { data, error }
+  }, [dispatch])
+
+  const updateSubtask = useCallback(async (id, updates) => {
+    const { data, error } = await supabase
+      .from('tasks')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+    if (!error && data) dispatch({ type: 'UPDATE_TASK', payload: data })
+    return { data, error }
+  }, [dispatch])
+
+  const deleteSubtask = useCallback(async (id) => {
+    const { error } = await supabase.from('tasks').delete().eq('id', id)
+    if (!error) dispatch({ type: 'DELETE_TASK', payload: id })
+    return { error }
+  }, [dispatch])
+
   return {
     fetchOrganizations,
     createOrganization,
@@ -700,5 +763,11 @@ export function useSupabase() {
     deleteCustomFieldOption,
     fetchCustomFieldValues,
     setCustomFieldValue,
+    logTaskActivity,
+    fetchTaskActivity,
+    fetchSubtasks,
+    createSubtask,
+    updateSubtask,
+    deleteSubtask,
   }
 }

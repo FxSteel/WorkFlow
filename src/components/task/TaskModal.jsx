@@ -32,7 +32,7 @@ export default function TaskModal() {
   const [form, setForm] = useState({
     title: '',
     description: '',
-    status: 'Por hacer',
+    status: 'Backlog',
     priority: 'medium',
     assignee_id: null,
     assignee_name: '',

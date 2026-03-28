@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import { cn } from '../../lib/utils'
 import { STATUS_COLORS } from '../../lib/constants'
@@ -11,8 +12,9 @@ const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 
 
 export default function CalendarView({ filteredTasks }) {
   const { state, openTask, dispatch } = useApp()
+  const { user } = useAuth()
   const tasks = filteredTasks || tasks
-  const { updateTask } = useSupabase()
+  const { updateTask, logTaskActivity } = useSupabase()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [draggedTask, setDraggedTask] = useState(null)
   const [dragOverDate, setDragOverDate] = useState(null)
@@ -123,6 +125,12 @@ export default function CalendarView({ filteredTasks }) {
       toast.error('Error al mover la tarea')
     } else {
       toast.success('Fecha actualizada')
+      logTaskActivity({
+        taskId: draggedTask.id, userId: user?.id,
+        userName: user?.user_metadata?.full_name || user?.email?.split('@')[0] || '',
+        userAvatar: user?.user_metadata?.avatar_url,
+        action: 'due_date_changed', oldValue: draggedTask.due_date, newValue: dateKey,
+      })
     }
 
     setDraggedTask(null)

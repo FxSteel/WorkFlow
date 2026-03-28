@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { Plus, ChevronDown, ChevronRight, Zap, MoreHorizontal, Pencil, Trash2, Calendar, Palette, AlertTriangle } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import { usePermissions } from '../../hooks/usePermissions'
 import TaskRow from '../task/TaskRow'
@@ -12,7 +13,9 @@ import CalendarView from '../views/CalendarView'
 import GanttView from '../views/GanttView'
 import FichasView from '../views/FichasView'
 import CronogramaView from '../views/CronogramaView'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select'
 import { cn } from '../../lib/utils'
+import { PRIORITY_OPTIONS } from '../../lib/constants'
 import BoardSkeleton from '../skeleton/BoardSkeleton'
 import { toast } from 'sonner'
 import EmptyState from '../ui/EmptyState'
@@ -21,7 +24,8 @@ import ColumnToggle from './ColumnToggle'
 
 export default function BoardView() {
   const { state, dispatch, openTaskModal } = useApp()
-  const { fetchTasks, fetchSprints, fetchMembers, createTask, fetchBoardStatuses, initDefaultStatuses, fetchCustomFields, fetchCustomFieldValues } = useSupabase()
+  const { user } = useAuth()
+  const { fetchTasks, fetchSprints, fetchMembers, createTask, fetchBoardStatuses, initDefaultStatuses, fetchCustomFields, fetchCustomFieldValues, logTaskActivity } = useSupabase()
   const { can } = usePermissions()
   const [collapsedSprints, setCollapsedSprints] = useState({})
   const [newTaskTitle, setNewTaskTitle] = useState('')
@@ -137,6 +141,8 @@ export default function BoardView() {
     setCollapsedSprints(prev => ({ ...prev, [id]: !prev[id] }))
   }
 
+  const [newTaskFields, setNewTaskFields] = useState({})
+
   const handleQuickAddTask = async (sprintId) => {
     if (!newTaskTitle.trim()) return
     const taskCount = state.tasks.filter(t => t.sprint_id === sprintId).length
@@ -144,11 +150,15 @@ export default function BoardView() {
       title: newTaskTitle.trim(),
       board_id: state.currentBoard.id,
       sprint_id: sprintId,
-      status: state.boardStatuses?.[1]?.name || state.boardStatuses?.[0]?.name || 'Por hacer',
-      priority: 'medium',
+      status: newTaskFields.status || state.boardStatuses?.[0]?.name || 'Backlog',
+      priority: newTaskFields.priority || 'medium',
+      assignee_id: newTaskFields.assignee_id || null,
+      assignee_name: newTaskFields.assignee_name || '',
+      due_date: newTaskFields.due_date || null,
       position: taskCount,
     })
     setNewTaskTitle('')
+    setNewTaskFields({})
     setAddingToSprint(null)
   }
 
@@ -204,6 +214,8 @@ export default function BoardView() {
           newTaskTitle={newTaskTitle}
           setNewTaskTitle={setNewTaskTitle}
           handleQuickAddTask={handleQuickAddTask}
+          newTaskFields={newTaskFields}
+          setNewTaskFields={setNewTaskFields}
           isColVisible={isColVisible}
         />
       )}
@@ -218,14 +230,159 @@ export default function BoardView() {
   )
 }
 
+function InlineNewTaskRow({ gridTemplate, orderedCols, isColVisible, title, setTitle, fields, setFields, state, onSubmit, onCancel }) {
+  const assignableUsers = state.orgMembers || []
+  const customFields = state.customFields || []
+  const triggerCls = "border-0 bg-transparent h-7 px-1 text-xs hover:bg-accent w-auto [&>svg]:hidden focus:ring-0 focus:outline-none"
+
+  const renderCell = (colKey) => {
+    if (!isColVisible(colKey)) return null
+
+    if (colKey === 'assignee') {
+      const a = assignableUsers.find(u => u.id === fields.assignee_id)
+      return (
+        <Select value={fields.assignee_id || '_none'} onValueChange={(val) => {
+          const m = assignableUsers.find(u => u.id === val)
+          setFields(prev => ({ ...prev, assignee_id: val === '_none' ? null : val, assignee_name: m?.name || '' }))
+        }}>
+          <SelectTrigger className={triggerCls}>
+            <span className="text-[11px] text-muted-foreground">{a?.name || 'Sin asignar'}</span>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_none">Sin asignar</SelectItem>
+            {assignableUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      )
+    }
+
+    if (colKey === 'status') {
+      const val = fields.status || state.boardStatuses?.[0]?.name || 'Backlog'
+      const obj = (state.boardStatuses || []).find(s => s.name === val)
+      return (
+        <Select value={val} onValueChange={(v) => setFields(prev => ({ ...prev, status: v }))}>
+          <SelectTrigger className={triggerCls}>
+            <span className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white" style={{ backgroundColor: obj?.color || '#6b7280' }}>{val}</span>
+          </SelectTrigger>
+          <SelectContent>
+            {(state.boardStatuses || []).map(s => (
+              <SelectItem key={s.id} value={s.name}>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white" style={{ backgroundColor: s.color }}>{s.name}</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )
+    }
+
+    if (colKey === 'due_date') return (
+      <DatePicker
+        value={fields.due_date || ''}
+        onChange={(val) => setFields(prev => ({ ...prev, due_date: val || null }))}
+        placeholder="Sin fecha"
+        size="sm"
+        className="border-0 bg-transparent hover:bg-accent"
+      />
+    )
+
+    if (colKey === 'priority') {
+      const val = fields.priority || 'medium'
+      const obj = PRIORITY_OPTIONS.find(p => p.value === val)
+      return (
+        <Select value={val} onValueChange={(v) => setFields(prev => ({ ...prev, priority: v }))}>
+          <SelectTrigger className={triggerCls}>
+            <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium', obj?.color, val === 'medium' ? 'text-black' : 'text-white')}>{obj?.label}</span>
+          </SelectTrigger>
+          <SelectContent>
+            {PRIORITY_OPTIONS.map(p => (
+              <SelectItem key={p.value} value={p.value}>
+                <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium', p.color, p.value === 'medium' ? 'text-black' : 'text-white')}>{p.label}</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )
+    }
+
+    if (colKey === 'sprint') return <span className="text-[11px] text-muted-foreground">Sin asignar</span>
+
+    // Custom field dropdown
+    if (colKey.startsWith('cf_')) {
+      const cfId = colKey.replace('cf_', '')
+      const cf = customFields.find(c => c.id === cfId)
+      if (cf?.type === 'dropdown') {
+        const opts = cf.custom_field_options || []
+        const cfVal = fields[`cf_${cf.id}`] || '_none'
+        const selectedOpt = opts.find(o => o.id === cfVal)
+        return (
+          <Select value={cfVal} onValueChange={(v) => setFields(prev => ({ ...prev, [`cf_${cf.id}`]: v === '_none' ? null : v }))}>
+            <SelectTrigger className={triggerCls}>
+              {selectedOpt ? (
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white" style={{ backgroundColor: selectedOpt.color }}>{selectedOpt.label}</span>
+              ) : <span className="text-[11px] text-muted-foreground">Sin asignar</span>}
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">Sin asignar</SelectItem>
+              {opts.map(o => (
+                <SelectItem key={o.id} value={o.id}>
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-medium text-white" style={{ backgroundColor: o.color }}>{o.label}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )
+      }
+      return <span className="text-[11px] text-muted-foreground">Sin asignar</span>
+    }
+
+    return <span className="text-[11px] text-muted-foreground">Sin asignar</span>
+  }
+
+  const colOrder = {}
+  orderedCols.forEach((col, i) => { colOrder[col.key] = i + 1 })
+
+  return (
+    <div
+      className="grid gap-0 border-t border-border bg-primary/5 text-sm"
+      style={{ gridTemplateColumns: gridTemplate }}
+    >
+      <div style={{ order: 0 }} className="px-3 py-2.5 flex items-center gap-2 min-w-0">
+        <input
+          autoFocus
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onSubmit()
+            if (e.key === 'Escape') onCancel()
+          }}
+          placeholder="Nombre de la tarea..."
+          className="flex-1 text-sm bg-transparent text-foreground focus:outline-none placeholder:text-muted-foreground"
+        />
+      </div>
+      {orderedCols.map(col => (
+        <div
+          key={col.key}
+          style={{ order: colOrder[col.key] }}
+          className={`py-2.5 flex items-center justify-center ${isColVisible(col.key) ? 'px-2' : 'overflow-hidden w-0 p-0'}`}
+        >
+          {renderCell(col.key)}
+        </div>
+      ))}
+      <div style={{ order: orderedCols.length + 1 }} className="py-2.5 px-2" />
+    </div>
+  )
+}
+
 function TableView({
   state, collapsedSprints, toggleSprint,
   addingToSprint, setAddingToSprint,
   newTaskTitle, setNewTaskTitle, handleQuickAddTask,
+  newTaskFields, setNewTaskFields,
   isColVisible,
 }) {
   const { dispatch } = useApp()
-  const { updateSprint, deleteSprint, updateTask, setCustomFieldValue } = useSupabase()
+  const { user } = useAuth()
+  const { updateSprint, deleteSprint, updateTask, setCustomFieldValue, logTaskActivity } = useSupabase()
   const customFields = state.customFields || []
   const visibleCF = customFields.filter(cf => isColVisible(`cf_${cf.id}`))
 
@@ -245,7 +402,8 @@ function TableView({
     try { const saved = JSON.parse(localStorage.getItem(colOrderKey)); return saved || null } catch { return null }
   })
   const [draggedCol, setDraggedCol] = useState(null)
-  const [dragOverCol, setDragOverCol] = useState(null)
+  const [colDropIndicator, setColDropIndicator] = useState(null) // { key, side: 'left'|'right' }
+  const headerRef = useRef(null)
 
   // Reset column order when board changes
   useEffect(() => {
@@ -254,7 +412,6 @@ function TableView({
 
   const orderedCols = (() => {
     if (!columnOrder) return defaultColDefs
-    // Map saved order to current col defs, append any new cols not in saved order
     const ordered = []
     for (const key of columnOrder) {
       const col = defaultColDefs.find(c => c.key === key)
@@ -266,26 +423,46 @@ function TableView({
     return ordered
   })()
 
-  const handleColDragStart = (colKey) => setDraggedCol(colKey)
+  const handleColDragStart = (e, colKey) => {
+    setDraggedCol(colKey)
+    e.dataTransfer.effectAllowed = 'move'
+  }
   const handleColDragOver = (e, colKey) => {
     e.preventDefault()
-    if (draggedCol && draggedCol !== colKey) setDragOverCol(colKey)
+    if (!draggedCol || draggedCol === colKey) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const isLeft = (e.clientX - rect.left) < rect.width / 2
+    const colIdx = orderedCols.findIndex(c => c.key === colKey)
+    // Normalize: always store as 'left' of a column index to avoid double lines
+    if (isLeft) {
+      setColDropIndicator({ idx: colIdx, key: colKey, side: 'left' })
+    } else {
+      const nextCol = orderedCols[colIdx + 1]
+      if (nextCol) {
+        setColDropIndicator({ idx: colIdx + 1, key: nextCol.key, side: 'left' })
+      } else {
+        setColDropIndicator({ idx: colIdx, key: colKey, side: 'right' })
+      }
+    }
   }
-  const handleColDrop = (colKey) => {
-    if (!draggedCol || draggedCol === colKey) { setDraggedCol(null); setDragOverCol(null); return }
+  const handleColDrop = () => {
+    if (!draggedCol || !colDropIndicator) { setDraggedCol(null); setColDropIndicator(null); return }
     const keys = orderedCols.map(c => c.key)
     const fromIdx = keys.indexOf(draggedCol)
-    const toIdx = keys.indexOf(colKey)
-    if (fromIdx === -1 || toIdx === -1) return
+    let toIdx = colDropIndicator.idx
+    if (colDropIndicator.side === 'right') toIdx++
+    if (fromIdx === -1) return
+    if (fromIdx < toIdx) toIdx--
+    if (fromIdx === toIdx) { setDraggedCol(null); setColDropIndicator(null); return }
     const newKeys = [...keys]
     newKeys.splice(fromIdx, 1)
     newKeys.splice(toIdx, 0, draggedCol)
     setColumnOrder(newKeys)
     localStorage.setItem(`workflow-col-order-${boardId}`, JSON.stringify(newKeys))
     setDraggedCol(null)
-    setDragOverCol(null)
+    setColDropIndicator(null)
   }
-  const handleColDragEnd = () => { setDraggedCol(null); setDragOverCol(null) }
+  const handleColDragEnd = () => { setDraggedCol(null); setColDropIndicator(null) }
 
   const gridTemplate = [
     'minmax(250px,2fr)',
@@ -362,6 +539,14 @@ function TableView({
       const adjustedIdx = targetIdx !== null ? targetIdx : sprintTasks.length
       dispatch({ type: 'UPDATE_TASK', payload: { id: draggedTask.id, sprint_id: sprintId, position: adjustedIdx } })
       await updateTask(draggedTask.id, { sprint_id: sprintId, position: adjustedIdx })
+      const oldSprint = state.sprints.find(s => s.id === draggedTask.sprint_id)?.name || null
+      const newSprint = state.sprints.find(s => s.id === sprintId)?.name || null
+      logTaskActivity({
+        taskId: draggedTask.id, userId: user?.id,
+        userName: user?.user_metadata?.full_name || user?.email?.split('@')[0] || '',
+        userAvatar: user?.user_metadata?.avatar_url,
+        action: 'sprint_changed', oldValue: oldSprint, newValue: newSprint,
+      })
     }
     handleTaskDragEnd()
   }
@@ -547,21 +732,27 @@ function TableView({
             {!isCollapsed && (
               <div className="rounded-lg border border-border bg-card overflow-x-auto">
                 <div className="min-w-fit">
-                <div className="grid gap-0 bg-muted/50 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider" style={{ gridTemplateColumns: gridTemplate }}>
+                <div ref={headerRef} className="relative grid gap-0 bg-muted/50 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider" style={{ gridTemplateColumns: gridTemplate }}>
                   <div className="px-3 py-2">Tarea</div>
                   {orderedCols.map(col => (
                     <div
                       key={col.key}
                       draggable
-                      onDragStart={() => handleColDragStart(col.key)}
+                      onDragStart={(e) => handleColDragStart(e, col.key)}
                       onDragOver={(e) => handleColDragOver(e, col.key)}
-                      onDrop={() => handleColDrop(col.key)}
+                      onDrop={handleColDrop}
                       onDragEnd={handleColDragEnd}
-                      className={`px-3 py-2 text-center whitespace-nowrap cursor-grab active:cursor-grabbing select-none transition-colors ${
+                      className={`relative px-3 py-2 text-center whitespace-nowrap cursor-grab active:cursor-grabbing select-none transition-colors ${
                         !isColVisible(col.key) ? 'overflow-hidden' : ''
-                      } ${dragOverCol === col.key ? 'bg-primary/10' : ''} ${draggedCol === col.key ? 'opacity-40' : ''}`}
+                      } ${draggedCol === col.key ? 'opacity-40' : ''}`}
                     >
                       {isColVisible(col.key) ? col.label : ''}
+                      {colDropIndicator?.key === col.key && colDropIndicator.side === 'left' && (
+                        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-[#000000] z-10" />
+                      )}
+                      {colDropIndicator?.key === col.key && colDropIndicator.side === 'right' && (
+                        <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-[#000000] z-10" />
+                      )}
                     </div>
                   ))}
                   <div className="px-3 py-2 text-center"></div>
@@ -591,20 +782,18 @@ function TableView({
 
                 </div>
                 {addingToSprint === sprint.id ? (
-                  <div className="px-3 py-2 border-t border-border">
-                    <input
-                      autoFocus
-                      value={newTaskTitle}
-                      onChange={(e) => setNewTaskTitle(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleQuickAddTask(sprint.id)
-                        if (e.key === 'Escape') { setAddingToSprint(null); setNewTaskTitle('') }
-                      }}
-                      onBlur={() => { if (!newTaskTitle.trim()) { setAddingToSprint(null); setNewTaskTitle('') } }}
-                      placeholder="Nombre de la tarea..."
-                      className="w-full px-2 py-1 text-sm bg-transparent text-foreground focus:outline-none placeholder:text-muted-foreground"
-                    />
-                  </div>
+                  <InlineNewTaskRow
+                    gridTemplate={gridTemplate}
+                    orderedCols={orderedCols}
+                    isColVisible={isColVisible}
+                    title={newTaskTitle}
+                    setTitle={setNewTaskTitle}
+                    fields={newTaskFields}
+                    setFields={setNewTaskFields}
+                    state={state}
+                    onSubmit={() => handleQuickAddTask(sprint.id)}
+                    onCancel={() => { setAddingToSprint(null); setNewTaskTitle(''); setNewTaskFields({}) }}
+                  />
                 ) : can('createTask') ? (
                   <button
                     onClick={() => setAddingToSprint(sprint.id)}
@@ -653,13 +842,13 @@ function TableView({
             <div className="min-w-fit">
             <div className="grid gap-0 bg-muted/50 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider" style={{ gridTemplateColumns: gridTemplate }}>
               <div className="px-3 py-2">Tarea</div>
-              <div className={`px-3 py-2 text-center ${!isColVisible('assignee') ? 'overflow-hidden' : ''}`}>{isColVisible('assignee') ? 'Responsable' : ''}</div>
-              <div className={`px-3 py-2 text-center ${!isColVisible('status') ? 'overflow-hidden' : ''}`}>{isColVisible('status') ? 'Estado' : ''}</div>
-              <div className={`px-3 py-2 text-center ${!isColVisible('due_date') ? 'overflow-hidden' : ''}`}>{isColVisible('due_date') ? 'Fecha' : ''}</div>
-              <div className={`px-3 py-2 text-center ${!isColVisible('priority') ? 'overflow-hidden' : ''}`}>{isColVisible('priority') ? 'Prioridad' : ''}</div>
-              <div className={`px-3 py-2 text-center ${!isColVisible('sprint') ? 'overflow-hidden' : ''}`}>{isColVisible('sprint') ? 'Sprint' : ''}</div>
-              {customFields.map(cf => (
-                <div key={cf.id} className={`px-3 py-2 text-center whitespace-nowrap ${!isColVisible(`cf_${cf.id}`) ? 'overflow-hidden' : ''}`}>{isColVisible(`cf_${cf.id}`) ? cf.name : ''}</div>
+              {orderedCols.map(col => (
+                <div
+                  key={col.key}
+                  className={`px-3 py-2 text-center whitespace-nowrap ${!isColVisible(col.key) ? 'overflow-hidden' : ''}`}
+                >
+                  {isColVisible(col.key) ? col.label : ''}
+                </div>
               ))}
               <div className="px-3 py-2 text-center"></div>
             </div>
@@ -677,6 +866,7 @@ function TableView({
                   gridTemplate={gridTemplate}
                   customFields={customFields}
                   isColVisible={isColVisible}
+                  orderedCols={orderedCols}
                 />
               </div>
             ))}
@@ -685,20 +875,18 @@ function TableView({
             )}
             </div>
             {addingToSprint === '_nosprint' ? (
-              <div className="px-3 py-2 border-t border-border">
-                <input
-                  autoFocus
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleQuickAddTask(null)
-                    if (e.key === 'Escape') { setAddingToSprint(null); setNewTaskTitle('') }
-                  }}
-                  onBlur={() => { if (!newTaskTitle.trim()) { setAddingToSprint(null); setNewTaskTitle('') } }}
-                  placeholder="Nombre de la tarea..."
-                  className="w-full px-2 py-1 text-sm bg-transparent text-foreground focus:outline-none placeholder:text-muted-foreground"
-                />
-              </div>
+              <InlineNewTaskRow
+                gridTemplate={gridTemplate}
+                orderedCols={orderedCols}
+                isColVisible={isColVisible}
+                title={newTaskTitle}
+                setTitle={setNewTaskTitle}
+                fields={newTaskFields}
+                setFields={setNewTaskFields}
+                state={state}
+                onSubmit={() => handleQuickAddTask(null)}
+                onCancel={() => { setAddingToSprint(null); setNewTaskTitle(''); setNewTaskFields({}) }}
+              />
             ) : can('createTask') ? (
               <button
                 onClick={() => setAddingToSprint('_nosprint')}

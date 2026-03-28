@@ -66,7 +66,7 @@ function CustomFieldDropdownCell({ cf, opts, selectedOpt, taskId, canEdit, setCu
         }
         style={selectedOpt ? { backgroundColor: selectedOpt.color } : undefined}
       >
-        {selectedOpt ? selectedOpt.label : '—'}
+        {selectedOpt ? selectedOpt.label : 'Sin asignar'}
       </button>
 
       {dd.open && createPortal(
@@ -110,7 +110,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
   }, [orderedCols])
   const { state, openTask } = useApp()
   const { user } = useAuth()
-  const { updateTask, deleteTask, createTask, setCustomFieldValue } = useSupabase()
+  const { updateTask, deleteTask, createTask, setCustomFieldValue, logTaskActivity } = useSupabase()
   const { notifyTaskAssigned, notifyStatusChange, notifyPriorityChange, notifyTaskCompleted } = useNotifications()
   const { can } = usePermissions()
 
@@ -133,14 +133,28 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
   const sprintObj = state.sprints.find(s => s.id === task.sprint_id)
   const sprintName = sprintObj?.name || null
 
+  const logAct = (action, oldValue, newValue) => {
+    logTaskActivity({
+      taskId: task.id,
+      userId: user?.id,
+      userName: user?.user_metadata?.full_name || user?.email?.split('@')[0] || '',
+      userAvatar: user?.user_metadata?.avatar_url,
+      action, oldValue, newValue,
+    })
+  }
+
   const handleSprintChange = async (sprintId) => {
+    const oldSprint = sprintName
     await updateTask(task.id, { sprint_id: sprintId })
+    const newSprint = state.sprints.find(s => s.id === sprintId)?.name || null
+    logAct('sprint_changed', oldSprint, newSprint)
     toast.success('Sprint actualizado')
     sprint.setOpen(false)
   }
 
   const handleStatusChange = async (s) => {
     await updateTask(task.id, { status: s })
+    logAct('status_changed', task.status, s)
     toast.success('Estado actualizado')
     status.setOpen(false)
     if (task.assignee_id) {
@@ -159,6 +173,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
 
   const handlePriorityChange = async (p) => {
     await updateTask(task.id, { priority: p })
+    logAct('priority_changed', task.priority, p)
     toast.success('Prioridad actualizada')
     priority.setOpen(false)
     if (task.assignee_id) {
@@ -171,6 +186,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
 
   const handleAssigneeChange = async (memberId, memberName) => {
     await updateTask(task.id, { assignee_id: memberId, assignee_name: memberName })
+    logAct('assignee_changed', task.assignee_name || null, memberName || null)
     toast.success(memberId ? `Asignado a ${memberName}` : 'Responsable removido')
     if (memberId) {
       const member = state.orgMembers.find(m => m.id === memberId)
@@ -231,6 +247,9 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
       {/* Task Name */}
       <div style={{ order: 0 }} className="px-3 py-2.5 flex items-center gap-2 min-w-0">
         {can('moveTask') && <GripVertical className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 cursor-grab" />}
+        {task.parent_task_id && (
+          <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">↳ sub</span>
+        )}
         <button
           onClick={() => openTask(task)}
           className="truncate text-foreground hover:text-primary transition-colors text-left"
@@ -266,7 +285,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
               )
             })()
           ) : (
-            <div className="w-6 h-6 rounded-full border-2 border-dashed border-muted-foreground/40" />
+            <span className="text-[11px] text-muted-foreground">Sin asignar</span>
           )}
         </button>
 
