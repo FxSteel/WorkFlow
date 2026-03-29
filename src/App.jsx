@@ -26,6 +26,7 @@ import Paywall from './components/billing/Paywall'
 import AdminPanel from './components/admin/AdminPanel'
 import StatusConfigModal from './components/board/StatusConfigModal'
 import CustomFieldsConfigModal from './components/board/CustomFieldsConfigModal'
+import NotesPage from './components/private/NotesPage'
 import { useNotifications } from './hooks/useNotifications'
 
 function getTaskEditorPref() {
@@ -200,7 +201,7 @@ function AppContent() {
           onOpenSettings={() => setShowSettings(true)}
           onOpenProfile={() => setShowProfile(true)}
         />
-        <BoardView />
+        {state.currentBoard?.isNotes ? <NotesPage /> : <BoardView />}
       </div>
 
       {/* Task editors: render based on user preference */}

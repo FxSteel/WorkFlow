@@ -17,6 +17,8 @@ import {
   Check,
   Settings2,
   Puzzle,
+  Lock,
+  FileText,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
@@ -38,6 +40,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
   const {
     createWorkspace, createBoard, deleteWorkspace, updateWorkspace, fetchBoards,
     deleteBoard, updateBoard, createOrganization, updateOrganization, deleteOrganization, fetchWorkspaces,
+    ensurePrivateWorkspace,
   } = useSupabase()
   const [expandedWorkspaces, setExpandedWorkspaces] = useState(() => {
     // Auto-expand workspace containing the saved board on initial load
@@ -74,6 +77,9 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
   const [editName, setEditName] = useState('')
   const [colorPicker, setColorPicker] = useState(null)
   const [workspacesLoaded, setWorkspacesLoaded] = useState(false)
+  const [privateWs, setPrivateWs] = useState(null)
+  const [privateExpanded, setPrivateExpanded] = useState(false)
+  const [showNotes, setShowNotes] = useState(false)
   const loadingStarted = useRef(false)
   const ctxRef = useRef(null)
   const orgDropdownRef = useRef(null)
@@ -86,14 +92,22 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
   const canCreateBoard = userRole !== 'viewer'
   const canManageWorkspaces = canEditWorkspace // for context menu
 
-  // Filter workspaces based on member access
-  const visibleWorkspaces = (userRole === 'owner' || userRole === 'admin')
+  // Ensure private workspace exists
+  useEffect(() => {
+    if (state.currentOrg && user) {
+      ensurePrivateWorkspace(state.currentOrg.id, user.id).then(ws => setPrivateWs(ws))
+    }
+  }, [state.currentOrg?.id, user?.id])
+
+  // Filter workspaces based on member access (exclude private workspaces)
+  const visibleWorkspaces = ((userRole === 'owner' || userRole === 'admin')
     ? state.workspaces
     : state.workspaces.filter(ws => {
         const memberWsIds = currentOrgMember?.workspace_ids || []
         if (memberWsIds.length === 0) return false
         return memberWsIds.includes(ws.id)
       })
+  ).filter(ws => !ws.is_private)
 
   // Track when workspaces fetch completes (loading: false->true->false)
   useEffect(() => {
@@ -272,6 +286,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
   }
 
   const selectBoard = (board) => {
+    setShowNotes(false)
     // Also set the workspace when selecting a board
     const workspace = state.workspaces.find(w => w.id === board.workspace_id)
     if (workspace) dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: workspace })
@@ -421,6 +436,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
       {(
         <div className="p-2 space-y-0.5">
           <SidebarItem icon={Home} label="Inicio" onClick={() => {
+            setShowNotes(false)
             dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: null })
             dispatch({ type: 'SET_CURRENT_BOARD', payload: null })
           }} />
@@ -604,6 +620,83 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
           </div>
         ))}
 
+        {/* ===== ESPACIO PRIVADO ===== */}
+        {workspacesLoaded && privateWs && (
+          <>
+            <div className="flex items-center justify-between px-2 mb-2 mt-4">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Espacio privado
+              </span>
+              <Lock className="w-3 h-3 text-muted-foreground" />
+            </div>
+
+            {/* Private board */}
+            {(privateWs.boards || []).map(board => (
+              <div
+                key={board.id}
+                className="mb-0.5 flex items-center group/pboard"
+                onContextMenu={(e) => openCtx(e, 'board', board)}
+              >
+                {editingId === board.id && editingType === 'board' ? (
+                  <div className="flex-1 px-1 ml-2">
+                    <input
+                      autoFocus
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { handleFinishRename(); setPrivateWs(prev => ({ ...prev, boards: prev.boards.map(b => b.id === board.id ? { ...b, name: editName.trim() } : b) })) }
+                        if (e.key === 'Escape') { setEditingId(null); setEditName('') }
+                      }}
+                      onBlur={() => { handleFinishRename(); setPrivateWs(prev => ({ ...prev, boards: prev.boards.map(b => b.id === board.id ? { ...b, name: editName.trim() || b.name } : b) })) }}
+                      className="w-full px-2 py-0.5 text-xs rounded border border-ring bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className={cn(
+                      'flex-1 flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors cursor-pointer ml-2',
+                      state.currentBoard?.id === board.id
+                        ? 'bg-primary/10 text-primary font-medium'
+                        : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                    )}
+                  >
+                    <div className="flex-1 flex items-center gap-2 min-w-0" onClick={() => selectBoard(board)}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg>
+                      <span className="truncate">{board.name}</span>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openCtxFromDots(e, 'board', board) }}
+                      className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors shrink-0 opacity-0 group-hover/pboard:opacity-100"
+                    >
+                      <MoreHorizontal className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Notes */}
+            <div className="mb-0.5">
+              <div
+                className={cn(
+                  'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors cursor-pointer ml-2',
+                  state.currentBoard?.isNotes
+                    ? 'bg-primary/10 text-primary font-medium'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                )}
+                onClick={() => {
+                  setShowNotes(true)
+                  dispatch({ type: 'SET_CURRENT_BOARD', payload: { id: '__notes__', name: 'Notas', isNotes: true } })
+                  dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: null })
+                }}
+              >
+                <FileText className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Notas</span>
+              </div>
+            </div>
+          </>
+        )}
+
       </div>
 
       {/* Team Presence — show when org is selected */}
@@ -690,24 +783,28 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
             )}
           </div>
 
-          {/* Destructive zone — always visible */}
-          <div className="h-px bg-border mx-2 my-1" />
-          <div className="py-1">
-            <button
-              onClick={() => {
-                setDeleteConfirm({
-                  type: ctxMenu.type,
-                  id: ctxMenu.id,
-                  name: ctxMenu.data.name,
-                })
-                setCtxMenu(null)
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              Eliminar {ctxMenu.type === 'workspace' ? 'espacio de trabajo' : 'tablero'}
-            </button>
-          </div>
+          {/* Destructive zone — hide for private boards */}
+          {!(ctxMenu.type === 'board' && privateWs?.boards?.some(b => b.id === ctxMenu.id)) && (
+            <>
+              <div className="h-px bg-border mx-2 my-1" />
+              <div className="py-1">
+                <button
+                  onClick={() => {
+                    setDeleteConfirm({
+                      type: ctxMenu.type,
+                      id: ctxMenu.id,
+                      name: ctxMenu.data.name,
+                    })
+                    setCtxMenu(null)
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Eliminar {ctxMenu.type === 'workspace' ? 'espacio de trabajo' : 'tablero'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 

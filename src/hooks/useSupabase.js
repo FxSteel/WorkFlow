@@ -719,6 +719,102 @@ export function useSupabase() {
     return { error }
   }, [dispatch])
 
+  // --- Private Workspace ---
+
+  const ensurePrivateWorkspace = useCallback(async (orgId, userId) => {
+    if (!orgId || !userId) return null
+    // Check if private workspace already exists
+    const { data: existing } = await supabase
+      .from('workspaces')
+      .select('*, boards(*)')
+      .eq('org_id', orgId)
+      .eq('is_private', true)
+      .eq('owner_user_id', userId)
+      .single()
+    if (existing) {
+      const defaultStatuses = [
+        { name: 'Backlog', color: '#6b7280', position: 0 },
+        { name: 'Por hacer', color: '#9ca3af', position: 1 },
+        { name: 'En progreso', color: '#3b82f6', position: 2 },
+        { name: 'En revisión', color: '#eab308', position: 3 },
+        { name: 'Completado', color: '#22c55e', position: 4 },
+        { name: 'Bloqueado', color: '#ef4444', position: 5 },
+      ]
+      // If workspace exists but has no boards, recreate the default board
+      if (!existing.boards || existing.boards.length === 0) {
+        const { data: board } = await supabase
+          .from('boards')
+          .insert({ name: 'Mi tablero', workspace_id: existing.id })
+          .select()
+          .single()
+        if (board) {
+          await supabase.from('board_statuses').insert(defaultStatuses.map(s => ({ ...s, board_id: board.id })))
+          existing.boards = [board]
+        }
+      } else {
+        // Ensure all 6 default statuses exist on existing private boards
+        for (const board of existing.boards) {
+          const { data: statuses } = await supabase.from('board_statuses').select('name').eq('board_id', board.id)
+          const existingNames = (statuses || []).map(s => s.name)
+          const missing = defaultStatuses.filter(s => !existingNames.includes(s.name))
+          if (missing.length > 0) {
+            await supabase.from('board_statuses').insert(missing.map(s => ({ ...s, board_id: board.id })))
+          }
+        }
+      }
+      return existing
+    }
+
+    // Create private workspace
+    const { data: ws } = await supabase
+      .from('workspaces')
+      .insert({ name: 'Privado', org_id: orgId, is_private: true, owner_user_id: userId, color: '#636e72' })
+      .select()
+      .single()
+    if (!ws) return null
+
+    // Create default board
+    const { data: board } = await supabase
+      .from('boards')
+      .insert({ name: 'Mi tablero', workspace_id: ws.id })
+      .select()
+      .single()
+    if (board) {
+      // Init default statuses
+      await supabase.from('board_statuses').insert([
+        { name: 'Backlog', color: '#6b7280', position: 0, board_id: board.id },
+        { name: 'Por hacer', color: '#9ca3af', position: 1, board_id: board.id },
+        { name: 'En progreso', color: '#3b82f6', position: 2, board_id: board.id },
+        { name: 'En revisión', color: '#eab308', position: 3, board_id: board.id },
+        { name: 'Completado', color: '#22c55e', position: 4, board_id: board.id },
+        { name: 'Bloqueado', color: '#ef4444', position: 5, board_id: board.id },
+      ])
+      ws.boards = [board]
+    }
+    return ws
+  }, [])
+
+  // --- User Notes ---
+
+  const fetchUserNotes = useCallback(async (userId, orgId) => {
+    const { data } = await supabase
+      .from('user_notes')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('org_id', orgId)
+      .single()
+    return data
+  }, [])
+
+  const saveUserNotes = useCallback(async (userId, orgId, content) => {
+    const { data } = await supabase
+      .from('user_notes')
+      .upsert({ user_id: userId, org_id: orgId, content, updated_at: new Date().toISOString() }, { onConflict: 'user_id,org_id' })
+      .select()
+      .single()
+    return data
+  }, [])
+
   return {
     fetchOrganizations,
     createOrganization,
@@ -769,5 +865,8 @@ export function useSupabase() {
     createSubtask,
     updateSubtask,
     deleteSubtask,
+    ensurePrivateWorkspace,
+    fetchUserNotes,
+    saveUserNotes,
   }
 }

@@ -47,15 +47,27 @@ export default function TaskSidePanel() {
     }).then(() => setActivityKey(k => k + 1))
   }, [task?.id, user, logTaskActivity])
 
+  const isPrivateBoard = useMemo(() => {
+    if (!task?.board_id && !state.currentBoard?.id) return false
+    const boardId = task?.board_id || state.currentBoard?.id
+    const board = state.boards.find(b => b.id === boardId)
+    if (!board) return false
+    const ws = state.workspaces.find(w => w.id === board.workspace_id)
+    return ws?.is_private === true
+  }, [task?.board_id, state.currentBoard?.id, state.boards, state.workspaces])
+
   const assignableUsers = useMemo(() => {
-    return state.orgMembers.map(m => ({
+    const members = isPrivateBoard
+      ? state.orgMembers.filter(m => m.user_id === user?.id)
+      : state.orgMembers
+    return members.map(m => ({
       id: m.id,
       name: m.name,
       email: m.email,
       avatar: m.avatar_url || (m.user_id === user?.id ? user?.user_metadata?.avatar_url : null),
       color: m.color || '#6c5ce7',
     }))
-  }, [user, state.orgMembers])
+  }, [user, state.orgMembers, isPrivateBoard])
 
   useEffect(() => {
     if (task) {

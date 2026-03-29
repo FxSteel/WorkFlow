@@ -114,15 +114,25 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
   const { notifyTaskAssigned, notifyStatusChange, notifyPriorityChange, notifyTaskCompleted } = useNotifications()
   const { can } = usePermissions()
 
+  const isPrivateBoard = useMemo(() => {
+    const board = state.boards.find(b => b.id === task.board_id)
+    if (!board) return false
+    const ws = state.workspaces.find(w => w.id === board.workspace_id)
+    return ws?.is_private === true
+  }, [task.board_id, state.boards, state.workspaces])
+
   const assignableUsers = useMemo(() => {
-    return state.orgMembers.map(m => ({
+    const members = isPrivateBoard
+      ? state.orgMembers.filter(m => m.user_id === user?.id)
+      : state.orgMembers
+    return members.map(m => ({
       id: m.id,
       name: m.name,
       email: m.email,
       avatar: m.avatar_url || (m.user_id === user?.id ? user?.user_metadata?.avatar_url : null),
       color: m.color || '#6c5ce7',
     }))
-  }, [user, state.orgMembers])
+  }, [user, state.orgMembers, isPrivateBoard])
 
   const assignee = usePortalDropdown()
   const status = usePortalDropdown()

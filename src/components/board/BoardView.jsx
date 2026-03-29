@@ -230,8 +230,16 @@ export default function BoardView() {
   )
 }
 
-function InlineNewTaskRow({ gridTemplate, orderedCols, isColVisible, title, setTitle, fields, setFields, state, onSubmit, onCancel }) {
-  const assignableUsers = state.orgMembers || []
+function InlineNewTaskRow({ gridTemplate, orderedCols, isColVisible, title, setTitle, fields, setFields, state, onSubmit, onCancel, userId }) {
+  const isPrivate = (() => {
+    const board = state.boards.find(b => b.id === state.currentBoard?.id)
+    if (!board) return false
+    const ws = state.workspaces.find(w => w.id === board.workspace_id)
+    return ws?.is_private === true
+  })()
+  const assignableUsers = isPrivate
+    ? (state.orgMembers || []).filter(m => m.user_id === userId)
+    : (state.orgMembers || [])
   const customFields = state.customFields || []
   const triggerCls = "border-0 bg-transparent h-7 px-1 text-xs hover:bg-accent w-auto [&>svg]:hidden focus:ring-0 focus:outline-none"
 
@@ -806,6 +814,7 @@ function TableView({
                     fields={newTaskFields}
                     setFields={setNewTaskFields}
                     state={state}
+                    userId={user?.id}
                     onSubmit={() => handleQuickAddTask(sprint.id)}
                     onCancel={() => { setAddingToSprint(null); setNewTaskTitle(''); setNewTaskFields({}) }}
                   />
@@ -899,6 +908,7 @@ function TableView({
                 fields={newTaskFields}
                 setFields={setNewTaskFields}
                 state={state}
+                userId={user?.id}
                 onSubmit={() => handleQuickAddTask(null)}
                 onCancel={() => { setAddingToSprint(null); setNewTaskTitle(''); setNewTaskFields({}) }}
               />

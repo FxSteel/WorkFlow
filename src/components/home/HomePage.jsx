@@ -34,9 +34,10 @@ export default function HomePage() {
   // Get current member's workspace access
   const currentMember = state.orgMembers.find(m => m.user_id === user?.id)
   const isAdminOrOwner = currentMember?.role === 'owner' || currentMember?.role === 'admin'
-  const accessibleWsIds = isAdminOrOwner
-    ? state.workspaces.map(w => w.id)
-    : (currentMember?.workspace_ids || [])
+  const accessibleWsIds = (isAdminOrOwner
+    ? state.workspaces
+    : state.workspaces.filter(ws => (currentMember?.workspace_ids || []).includes(ws.id))
+  ).filter(ws => !ws.is_private || ws.owner_user_id === user?.id).map(w => w.id)
 
   // Fetch recent boards filtered by current org workspaces
   useEffect(() => {
@@ -269,17 +270,11 @@ export default function HomePage() {
                   <div
                     key={task.id}
                     className="grid grid-cols-[1fr_140px_100px_100px_90px] gap-0 border-b border-border last:border-b-0 hover:bg-destructive/5 transition-colors text-sm cursor-pointer"
-                    onClick={() => {
-                      const wsId = task.boards?.workspace_id
-                      const ws = state.workspaces.find(w => w.id === wsId)
-                      if (ws) dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: ws })
-                      if (task.boards) dispatch({ type: 'SET_CURRENT_BOARD', payload: { id: task.board_id, name: task.boards.name, workspace_id: wsId } })
-                      openTask(task)
-                    }}
+                    onClick={() => dispatch({ type: 'OPEN_SIDE_PANEL', payload: task })}
                   >
                     <div className="px-4 py-3 flex items-center gap-2 min-w-0">
                       <div className="min-w-0">
-                        <p className="text-foreground truncate font-medium text-[13px] hover:text-primary transition-colors">{task.title}</p>
+                        <p className="text-foreground truncate font-medium text-[13px] hover:text-primary transition-colors flex items-center gap-1.5">{task.parent_task_id && <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">↳ sub</span>}{task.title}</p>
                         {boardName && (
                           <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
                             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg>
@@ -362,18 +357,12 @@ export default function HomePage() {
                     <div
                       key={task.id}
                       className="grid grid-cols-[1fr_140px_100px_100px_90px] gap-0 border-b border-border last:border-b-0 hover:bg-accent/30 transition-colors text-sm cursor-pointer"
-                      onClick={() => {
-                        const wsId = task.boards?.workspace_id
-                        const ws = state.workspaces.find(w => w.id === wsId)
-                        if (ws) dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: ws })
-                        if (task.boards) dispatch({ type: 'SET_CURRENT_BOARD', payload: { id: task.board_id, name: task.boards.name, workspace_id: wsId } })
-                        openTask(task)
-                      }}
+                      onClick={() => dispatch({ type: 'OPEN_SIDE_PANEL', payload: task })}
                     >
                       {/* Task title */}
                       <div className="px-4 py-3 flex items-center gap-2 min-w-0">
                         <div className="min-w-0">
-                          <p className="text-foreground truncate font-medium text-[13px] hover:text-primary transition-colors">{task.title}</p>
+                          <p className="text-foreground truncate font-medium text-[13px] hover:text-primary transition-colors flex items-center gap-1.5">{task.parent_task_id && <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">↳ sub</span>}{task.title}</p>
                           {boardName && (
                             <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
                               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg>
