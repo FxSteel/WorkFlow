@@ -32,6 +32,8 @@ export default function TaskSidePanel() {
   const [pendingCFValues, setPendingCFValues] = useState({})
   const [activityKey, setActivityKey] = useState(0)
   const [saveStatus, setSaveStatus] = useState(null) // null | 'saving' | 'saved'
+  const [closing, setClosing] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const saveTimerRef = useRef(null)
 
   const logActivity = useCallback((action, oldValue, newValue) => {
@@ -78,6 +80,15 @@ export default function TaskSidePanel() {
 
   if (!state.isSidePanelOpen || !task) return null
 
+  const handleClose = () => {
+    if (closing) return
+    setClosing(true)
+    setTimeout(() => {
+      setClosing(false)
+      closeSidePanel()
+    }, 200)
+  }
+
   const savePendingCF = (fieldId, fieldType, value) => {
     setPendingCFValues(prev => ({ ...prev, [fieldId]: { fieldType, value } }))
   }
@@ -122,9 +133,14 @@ export default function TaskSidePanel() {
   }
 
   const handleDelete = async () => {
-    if (!isNew) await deleteTask(task.id)
-    toast.success('Tarea eliminada')
-    closeSidePanel()
+    setShowDeleteConfirm(false)
+    setClosing(true)
+    setTimeout(async () => {
+      if (!isNew) await deleteTask(task.id)
+      toast.success('Tarea eliminada')
+      setClosing(false)
+      closeSidePanel()
+    }, 200)
   }
 
   const handleCreate = async () => {
@@ -167,8 +183,8 @@ export default function TaskSidePanel() {
   return (
     <>
     {/* Backdrop */}
-    <div className="fixed inset-0 z-30" onClick={closeSidePanel} />
-    <div className="fixed top-0 right-0 h-screen w-[50vw] max-w-[1000px] min-w-[500px] z-40 flex flex-col bg-card border-l border-border shadow-2xl animate-slide-in-right overflow-hidden">
+    <div className={`fixed inset-0 z-30 transition-opacity duration-200 ${closing ? 'opacity-0' : 'opacity-100'}`} onClick={handleClose} />
+    <div className={`fixed top-0 right-0 h-screen w-[50vw] max-w-[1000px] min-w-[500px] z-40 flex flex-col bg-card border-l border-border shadow-2xl overflow-hidden transition-transform duration-200 ease-in-out ${closing ? 'translate-x-full' : 'animate-slide-in-right'}`}>
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-border">
         <div className="flex items-center gap-2">
@@ -188,7 +204,7 @@ export default function TaskSidePanel() {
         <div className="flex items-center gap-1">
           {!isNew && (
             <button
-              onClick={handleDelete}
+              onClick={() => setShowDeleteConfirm(true)}
               className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
               title="Eliminar"
             >
@@ -196,7 +212,7 @@ export default function TaskSidePanel() {
             </button>
           )}
           <button
-            onClick={closeSidePanel}
+            onClick={handleClose}
             className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
           >
             <X className="w-4 h-4" />
@@ -548,6 +564,41 @@ export default function TaskSidePanel() {
         </div>
       )}
     </div>
+
+    {/* Delete confirmation modal */}
+    {showDeleteConfirm && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={() => setShowDeleteConfirm(false)} />
+        <div className="relative z-10 w-full max-w-sm bg-card rounded-xl shadow-2xl border border-border animate-scale-in p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
+              <Trash2 className="w-5 h-5 text-destructive" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-foreground">Eliminar tarea</h3>
+              <p className="text-xs text-muted-foreground">Esta acción no se puede deshacer</p>
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            ¿Estás seguro de que deseas eliminar <strong className="text-foreground">"{task.title || 'Sin título'}"</strong>?
+          </p>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => setShowDeleteConfirm(false)}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-secondary text-secondary-foreground hover:bg-accent transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleDelete}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+            >
+              Eliminar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   )
 }

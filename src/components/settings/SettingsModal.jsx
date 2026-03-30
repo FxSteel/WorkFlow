@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   X, Settings, Bell, Link2, Building2, Trash2,
   AlertTriangle, Upload, CheckCircle2, Loader2,
   SlidersHorizontal, PanelRight, Maximize2, Layers,
   CreditCard, Sparkles, Check, ExternalLink,
-  Mail, Send, Shield, UserPlus, Clock, Users,
+  Mail, Send, Shield, UserPlus, Clock, Users, MoreHorizontal,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useApp } from '../../context/AppContext'
@@ -338,6 +338,7 @@ function MembersSettings() {
   const { user } = useAuth()
   const { state } = useApp()
   const { fetchInvites, createInvite, deleteInvite, fetchMembers, removeOrgMember, updateOrgMember } = useSupabase()
+  const publicWorkspaces = state.workspaces.filter(ws => !ws.is_private)
 
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('member')
@@ -348,6 +349,9 @@ function MembersSettings() {
   const [editRole, setEditRole] = useState('')
   const [editWsIds, setEditWsIds] = useState([])
   const [deleteMemberId, setDeleteMemberId] = useState(null)
+  const [memberMenu, setMemberMenu] = useState(null)
+  const [memberMenuPos, setMemberMenuPos] = useState({ top: 0, left: 0 })
+  const memberMenuRef = useRef(null)
 
   const org = state.currentOrg
   const isOwner = org?.owner_id === user?.id
@@ -362,8 +366,17 @@ function MembersSettings() {
   }, [org?.id])
 
   useEffect(() => {
+    if (!memberMenu) return
+    const close = (e) => {
+      if (memberMenuRef.current && !memberMenuRef.current.contains(e.target)) setMemberMenu(null)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [memberMenu])
+
+  useEffect(() => {
     if (role === 'admin') {
-      setSelectedWorkspaces(state.workspaces.map(w => w.id))
+      setSelectedWorkspaces(publicWorkspaces.map(w => w.id))
     } else {
       setSelectedWorkspaces([])
     }
@@ -388,7 +401,7 @@ function MembersSettings() {
     if (state.orgMembers.find(m => m.email === inviteEmail)) { setError('Ya es miembro'); return }
 
     setSending(true)
-    const wsIds = role === 'admin' ? state.workspaces.map(w => w.id) : selectedWorkspaces
+    const wsIds = role === 'admin' ? publicWorkspaces.map(w => w.id) : selectedWorkspaces
 
     const { error: inviteError } = await createInvite({
       org_id: org.id, email: inviteEmail, role, workspace_ids: wsIds,
@@ -504,9 +517,9 @@ function MembersSettings() {
           </div>
 
           {/* Workspace Selection for members */}
-          {role === 'member' && state.workspaces.length > 0 && (
+          {role === 'member' && publicWorkspaces.length > 0 && (
             <div className="space-y-1.5 max-h-[120px] overflow-y-auto rounded-lg border border-border p-1">
-              {state.workspaces.map(ws => {
+              {publicWorkspaces.map(ws => {
                 const sel = selectedWorkspaces.includes(ws.id)
                 return (
                   <button key={ws.id} onClick={() => toggleWorkspace(ws.id)}
@@ -587,29 +600,28 @@ function MembersSettings() {
                     </p>
                   </div>
                   <span className={cn(
-                    'px-1.5 py-0.5 rounded-full text-[9px] font-medium',
+                    'px-2 py-0.5 rounded-full text-[9px] font-medium shrink-0',
                     isMemberOwner ? 'bg-primary/10 text-primary' : member.role === 'admin' ? 'bg-blue-500/10 text-blue-500' : member.role === 'viewer' ? 'bg-orange-500/10 text-orange-500' : 'bg-muted text-muted-foreground'
                   )}>
-                    {member.role === 'owner' ? 'Owner' : member.role === 'admin' ? 'Admin' : member.role === 'viewer' ? 'Visualizador' : 'Miembro'}
+                    {member.role === 'owner' ? 'Owner' : member.role === 'admin' ? 'Admin' : member.role === 'viewer' ? 'Viewer' : 'Miembro'}
                   </span>
-                  {canEdit && !isEditing && (
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
-                      <button onClick={() => {
-                        setEditingMember(member.id)
-                        setEditRole(member.role)
-                        setEditWsIds(member.workspace_ids || [])
-                        setDeleteMemberId(null)
-                      }} className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground" title="Editar acceso">
-                        <SlidersHorizontal className="w-3 h-3" />
+                  <div className="shrink-0 w-6">
+                    {canEdit && !isEditing && (<>
+                      <button
+                        onClick={(e) => {
+                          if (memberMenu === member.id) { setMemberMenu(null); return }
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          setMemberMenuPos({ top: rect.bottom + 4, left: rect.right - 160 })
+                          setMemberMenu(member.id)
+                        }}
+                        className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <MoreHorizontal className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => { setDeleteMemberId(member.id); setEditingMember(null) }}
-                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive" title="Eliminar">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
+                    </>)}
+                  </div>
                   {deleteMemberId === member.id && (
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 shrink-0">
                       <button onClick={async () => { await removeOrgMember(member.id); toast.success(`${member.name} eliminado`); setDeleteMemberId(null) }}
                         className="text-[9px] px-1.5 py-0.5 rounded bg-destructive text-white">Eliminar</button>
                       <button onClick={() => setDeleteMemberId(null)}
@@ -628,7 +640,7 @@ function MembersSettings() {
                         {ROLE_OPTIONS.map(opt => (
                           <button key={opt.value} onClick={() => {
                             setEditRole(opt.value)
-                            if (opt.value === 'admin') setEditWsIds(state.workspaces.map(w => w.id))
+                            if (opt.value === 'admin') setEditWsIds(publicWorkspaces.map(w => w.id))
                           }} className={cn(
                             'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-left transition-all',
                             editRole === opt.value ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-muted-foreground/40'
@@ -645,7 +657,7 @@ function MembersSettings() {
                       <div>
                         <label className="text-[10px] font-medium text-muted-foreground mb-1.5 block">Espacios de trabajo</label>
                         <div className="space-y-1 max-h-[100px] overflow-y-auto rounded-md border border-border p-1">
-                          {state.workspaces.map(ws => {
+                          {publicWorkspaces.map(ws => {
                             const sel = editWsIds.includes(ws.id)
                             return (
                               <button key={ws.id} onClick={() => setEditWsIds(prev => sel ? prev.filter(id => id !== ws.id) : [...prev, ws.id])}
@@ -668,7 +680,7 @@ function MembersSettings() {
                     {/* Save / Cancel */}
                     <div className="flex items-center gap-2">
                       <button onClick={async () => {
-                        const wsIds = editRole === 'admin' ? state.workspaces.map(w => w.id) : editWsIds
+                        const wsIds = editRole === 'admin' ? publicWorkspaces.map(w => w.id) : editWsIds
                         await updateOrgMember(member.id, { role: editRole, workspace_ids: wsIds })
                         toast.success(`Acceso de ${member.name} actualizado`)
                         setEditingMember(null)
@@ -686,6 +698,39 @@ function MembersSettings() {
             )
           })}
         </div>
+
+        {/* Member action menu — fixed position to avoid overflow clipping */}
+        {memberMenu && (
+          <div
+            ref={memberMenuRef}
+            className="fixed w-40 rounded-lg border border-border bg-popover shadow-lg py-1 z-[200] animate-scale-in"
+            style={{ top: memberMenuPos.top, left: memberMenuPos.left }}
+          >
+            <button
+              onClick={() => {
+                const member = state.orgMembers.find(m => m.id === memberMenu)
+                if (member) {
+                  setEditingMember(member.id)
+                  setEditRole(member.role)
+                  setEditWsIds(member.workspace_ids || [])
+                  setDeleteMemberId(null)
+                }
+                setMemberMenu(null)
+              }}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-accent transition-colors"
+            >
+              <SlidersHorizontal className="w-3 h-3 text-muted-foreground" />
+              Editar acceso
+            </button>
+            <button
+              onClick={() => { setDeleteMemberId(memberMenu); setEditingMember(null); setMemberMenu(null) }}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 transition-colors"
+            >
+              <Trash2 className="w-3 h-3" />
+              Eliminar miembro
+            </button>
+          </div>
+        )}
       </section>
     </div>
   )

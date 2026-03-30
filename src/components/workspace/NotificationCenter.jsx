@@ -35,7 +35,7 @@ export default function NotificationCenter() {
   const [invites, setInvites] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadingId, setLoadingId] = useState(null)
-  const [activeTab, setActiveTab] = useState('all')
+  const [activeTab, setActiveTab] = useState('unread')
   const ref = useRef(null)
 
   useEffect(() => {
@@ -188,8 +188,8 @@ export default function NotificationCenter() {
           {/* Tabs */}
           <div className="flex border-b border-border">
             {[
-              { id: 'all', label: 'Todas' },
               { id: 'unread', label: `Sin leer (${notifications.filter(n => !n.read).length})` },
+              { id: 'all', label: 'Todas' },
             ].map(tab => (
               <button
                 key={tab.id}

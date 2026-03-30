@@ -27,6 +27,7 @@ export default function InviteModal({ isOpen, onClose }) {
   const { state } = useApp()
   const { user } = useAuth()
   const { fetchInvites, createInvite, deleteInvite, fetchMembers, removeOrgMember } = useSupabase()
+  const publicWorkspaces = state.workspaces.filter(ws => !ws.is_private)
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('member')
   const [selectedWorkspaces, setSelectedWorkspaces] = useState([])
@@ -51,7 +52,7 @@ export default function InviteModal({ isOpen, onClose }) {
   // When role changes to admin, select all workspaces
   useEffect(() => {
     if (role === 'admin') {
-      setSelectedWorkspaces(state.workspaces.map(w => w.id))
+      setSelectedWorkspaces(publicWorkspaces.map(w => w.id))
     } else {
       setSelectedWorkspaces([])
     }
@@ -106,7 +107,7 @@ export default function InviteModal({ isOpen, onClose }) {
 
     setSending(true)
     const inviteEmail = email.trim().toLowerCase()
-    const wsIds = role === 'admin' ? state.workspaces.map(w => w.id) : selectedWorkspaces
+    const wsIds = role === 'admin' ? publicWorkspaces.map(w => w.id) : selectedWorkspaces
 
     // 1. Save invite record
     const { error: inviteError } = await createInvite({
@@ -288,7 +289,7 @@ export default function InviteModal({ isOpen, onClose }) {
               </div>
 
               {/* Workspace Selection — only for members */}
-              {role === 'member' && state.workspaces.length > 0 && (
+              {role === 'member' && publicWorkspaces.length > 0 && (
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
                     Espacios de trabajo
@@ -297,7 +298,7 @@ export default function InviteModal({ isOpen, onClose }) {
                     Selecciona a que espacios tendra acceso este miembro
                   </p>
                   <div className="space-y-1 max-h-[160px] overflow-y-auto rounded-lg border border-border p-1">
-                    {state.workspaces.map(ws => {
+                    {publicWorkspaces.map(ws => {
                       const isSelected = selectedWorkspaces.includes(ws.id)
                       return (
                         <button
@@ -369,7 +370,7 @@ export default function InviteModal({ isOpen, onClose }) {
                     const isMemberOwner = member.role === 'owner'
                     const isMe = member.user_id === user?.id
                     const memberWsCount = member.role === 'admin' || member.role === 'owner'
-                      ? state.workspaces.length
+                      ? publicWorkspaces.length
                       : (member.workspace_ids || []).length
                     const canRemove = canInvite && !isMemberOwner && !isMe
                     return (

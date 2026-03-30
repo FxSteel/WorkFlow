@@ -52,7 +52,7 @@ function CustomFieldDropdownCell({ cf, opts, selectedOpt, taskId, canEdit, setCu
   }
 
   return (
-    <div className="px-2 py-2.5 flex items-center justify-center">
+    <>
       <button
         ref={dd.triggerRef}
         onClick={() => {
@@ -95,7 +95,7 @@ function CustomFieldDropdownCell({ cf, opts, selectedOpt, taskId, canEdit, setCu
         </div>,
         document.body
       )}
-    </div>
+    </>
   )
 }
 
@@ -482,7 +482,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
           const opts = cf.custom_field_options || []
           const selectedOpt = opts.find(o => o.id === cfVal?.value_option_id)
           return (
-            <div key={cf.id} style={{ order: cfOrder ?? 99 }}>
+            <div key={cf.id} style={{ order: cfOrder ?? 99 }} className="px-2 py-2.5 flex items-center justify-center">
               <CustomFieldDropdownCell
                 cf={cf}
                 opts={opts}
