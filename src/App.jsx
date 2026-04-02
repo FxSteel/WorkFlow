@@ -258,13 +258,32 @@ function AuthenticatedApp() {
     return <AdminPanel />
   }
 
-  return <SubscriptionGate user={user} />
+  return (
+    <AppProvider>
+      <SubscriptionGate user={user} />
+    </AppProvider>
+  )
 }
 
 function SubscriptionGate({ user }) {
-  const { hasAccess } = useSubscription(user?.id)
+  const { state } = useApp()
+  const { orgAccess, checkAllOrgsAccess, checkOrgAccess, loading } = useSubscription(user?.id)
 
-  if (hasAccess === null) {
+  // Check access for all orgs once they're loaded
+  useEffect(() => {
+    if (state.organizations.length > 0) {
+      checkAllOrgsAccess(state.organizations)
+    }
+  }, [state.organizations])
+
+  // Re-check when current org changes
+  useEffect(() => {
+    if (state.currentOrg?.id) {
+      checkOrgAccess(state.currentOrg.id)
+    }
+  }, [state.currentOrg?.id])
+
+  if (loading && state.organizations.length > 0) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
@@ -275,15 +294,27 @@ function SubscriptionGate({ user }) {
     )
   }
 
-  if (!hasAccess) {
-    return <Paywall />
+  // If current org is blocked, show paywall
+  const currentOrgId = state.currentOrg?.id
+  const currentOrgHasAccess = currentOrgId ? orgAccess[currentOrgId] : undefined
+
+  // If no orgs yet (still loading or new user), let AppContent handle it (onboarding)
+  if (state.organizations.length === 0 || currentOrgHasAccess === undefined) {
+    return <AppContent />
   }
 
-  return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
-  )
+  if (!currentOrgHasAccess) {
+    return (
+      <Paywall
+        currentOrg={state.currentOrg}
+        organizations={state.organizations}
+        orgAccess={orgAccess}
+        isOwner={state.currentOrg?.owner_id === user?.id}
+      />
+    )
+  }
+
+  return <AppContent />
 }
 
 export default function App() {

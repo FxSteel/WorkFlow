@@ -850,26 +850,33 @@ function PreferencesSettings() {
 
 function BillingSettings() {
   const { user } = useAuth()
+  const { state } = useApp()
   const [subscription, setSubscription] = useState(null)
   const [loading, setLoading] = useState(true)
   const [paying, setPaying] = useState(false)
 
+  const org = state.currentOrg
+  const isOwner = org?.owner_id === user?.id
+
   useEffect(() => {
     fetchSubscription()
-  }, [])
+  }, [org?.id])
 
   const fetchSubscription = async () => {
+    if (!org) { setLoading(false); return }
     setLoading(true)
+
+    // Fetch the subscription for this org
     const { data } = await supabase
       .from('subscriptions')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('org_id', org.id)
       .order('created_at', { ascending: false })
       .limit(1)
       .single()
 
-    // Sync status with AlohaPay if pending
-    if (data?.status === 'pending' && data?.payment_link_id) {
+    // Sync status with AlohaPay if pending (only if owner)
+    if (isOwner && data?.status === 'pending' && data?.payment_link_id) {
       try {
         const res = await fetch(
           `https://api.alohapay.co/api/external/v1/payment-links/${data.payment_link_id}`,
@@ -877,7 +884,7 @@ function BillingSettings() {
         )
         const result = await res.json()
         if (result.success && result.data) {
-          const alohapayStatus = result.data.status // active, completed, cancelled, expired
+          const alohapayStatus = result.data.status
           let newStatus = data.status
           if (alohapayStatus === 'completed') newStatus = 'active'
           else if (alohapayStatus === 'cancelled') newStatus = 'cancelled'
@@ -899,6 +906,7 @@ function BillingSettings() {
   }
 
   const handleSubscribe = async () => {
+    if (!isOwner) return
     setPaying(true)
     try {
       const response = await fetch('https://api.alohapay.co/api/external/v1/payment-links', {
@@ -910,7 +918,7 @@ function BillingSettings() {
         body: JSON.stringify({
           amount: 25000,
           currency: 'CLP',
-          description: 'Pago de suscripción Mensual - WorkFlow',
+          description: `Suscripción WorkFlow - ${org?.name || 'Organización'}`,
           success_url: window.location.origin + '?payment=success',
         }),
       })
@@ -918,9 +926,9 @@ function BillingSettings() {
       const result = await response.json()
 
       if (result.success && result.data) {
-        // Save payment link to DB
         await supabase.from('subscriptions').insert({
           user_id: user.id,
+          org_id: org.id,
           plan: 'pro',
           status: 'pending',
           payment_link_id: result.data.id,
@@ -931,7 +939,6 @@ function BillingSettings() {
           current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         })
 
-        // Redirect to checkout
         window.open(result.data.url, '_blank')
         fetchSubscription()
       }
@@ -975,9 +982,16 @@ function BillingSettings() {
     <div className="px-6 py-5 space-y-6">
       {/* Current plan */}
       <div>
-        <h4 className="text-sm font-semibold text-foreground mb-1">Tu plan actual</h4>
+        <h4 className="text-sm font-semibold text-foreground mb-1">
+          {isOwner ? 'Plan de tu organización' : 'Plan de la organización'}
+        </h4>
         <p className="text-xs text-muted-foreground mb-4">
-          {isPro ? 'Tienes acceso completo a WorkFlow Pro.' : 'Estás usando el plan gratuito.'}
+          {isPro
+            ? `${org?.name || 'Tu organización'} tiene acceso completo a WorkFlow Pro.`
+            : isOwner
+              ? 'Suscríbete para habilitar el acceso a tu equipo.'
+              : 'Solo el administrador de la organización puede gestionar la suscripción.'
+          }
         </p>
 
         {/* Plan card */}
@@ -1030,7 +1044,7 @@ function BillingSettings() {
                 Activo
               </span>
             </div>
-          ) : isPending ? (
+          ) : isPending && isOwner ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between p-3 rounded-lg bg-warning/10 border border-warning/20">
                 <div>
@@ -1051,7 +1065,7 @@ function BillingSettings() {
                 Completar pago
               </a>
             </div>
-          ) : (
+          ) : isOwner && canSubscribe ? (
             <button
               onClick={handleSubscribe}
               disabled={paying}
@@ -1066,12 +1080,21 @@ function BillingSettings() {
                 </>
               )}
             </button>
+          ) : null}
+
+          {/* Non-owner message */}
+          {!isOwner && !isPro && (
+            <div className="p-3 rounded-lg bg-muted/50">
+              <p className="text-sm text-foreground">
+                Contacta al administrador de la organización para activar la suscripción.
+              </p>
+            </div>
           )}
         </div>
       </div>
 
       {/* Payment history */}
-      {subscription && (
+      {subscription && isOwner && (
         <div>
           <h4 className="text-sm font-semibold text-foreground mb-3">Historial de pagos</h4>
           <div className="rounded-lg border border-border overflow-hidden">
