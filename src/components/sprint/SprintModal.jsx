@@ -6,6 +6,7 @@ import { useSupabase } from '../../hooks/useSupabase'
 import { useNotifications } from '../../hooks/useNotifications'
 import DatePicker from '../ui/DatePicker'
 import { cn } from '../../lib/utils'
+import { usePermissions } from '../../hooks/usePermissions'
 
 const SPRINT_COLORS = [
   '#6c5ce7', '#0984e3', '#00b894', '#e17055', '#fdcb6e',
@@ -27,8 +28,10 @@ export default function SprintModal({ isOpen, onClose }) {
 
   if (!isOpen) return null
 
+  const { can } = usePermissions()
+
   const handleSave = async () => {
-    if (!form.name.trim()) return
+    if (!can('createSprint') || !form.name.trim()) return
     const { data: newSprint } = await createSprint({
       ...form,
       board_id: state.currentBoard.id,

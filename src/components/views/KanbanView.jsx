@@ -134,8 +134,8 @@ export default function KanbanView({ isColVisible = () => true, filteredTasks })
 
 
   return (
-    <div className="flex-1 min-h-0 overflow-auto p-4">
-      <div className="flex gap-4 min-w-max">
+    <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden p-4">
+      <div className="flex gap-4 min-w-max h-full">
         {(state.boardStatuses || []).map(col => {
           const columnTasks = tasks
             .filter(t => t.status === col.name)
@@ -145,7 +145,7 @@ export default function KanbanView({ isColVisible = () => true, filteredTasks })
           return (
             <div
               key={col.id}
-              className="w-[280px] flex flex-col shrink-0"
+              className="w-[280px] flex flex-col shrink-0 h-full"
               onDragEnter={(e) => handleColumnDragEnter(e, col.name)}
               onDragLeave={(e) => handleColumnDragLeave(e, col.name)}
               onDragOver={handleColumnDragOver}
@@ -153,7 +153,7 @@ export default function KanbanView({ isColVisible = () => true, filteredTasks })
             >
               {/* Column header */}
               <div
-                className="rounded-t-lg border-t-[3px] bg-card border border-border px-3 py-2.5 flex items-center justify-between transition-colors"
+                className="rounded-t-lg border-t-[3px] bg-card border border-border px-3 py-2.5 flex items-center justify-between transition-colors shrink-0"
                 style={{ borderTopColor: col.color }}
               >
                 <div className="flex items-center gap-2">
@@ -165,9 +165,9 @@ export default function KanbanView({ isColVisible = () => true, filteredTasks })
                 </div>
               </div>
 
-              {/* Cards area */}
+              {/* Cards area — independent vertical scroll per column */}
               <div className={cn(
-                'flex-1 space-y-2 pt-2 pb-4 min-h-[100px] rounded-b-lg transition-all duration-200',
+                'flex-1 min-h-0 overflow-y-auto scrollbar-hide space-y-2 pt-2 pb-4 rounded-b-lg transition-all duration-200',
                 isOver && cn('ring-2 ring-dashed ring-muted-foreground/30', col.dropBg)
               )}>
                 {columnTasks.map((task, index) => {

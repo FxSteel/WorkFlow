@@ -19,11 +19,14 @@ import {
   Puzzle,
   Lock,
   FileText,
+  LayoutGrid,
+  X,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import { cn } from '../../lib/utils'
+import { usePermissions } from '../../hooks/usePermissions'
 import SidebarSkeleton from '../skeleton/SidebarSkeleton'
 import TeamPresence from '../workspace/TeamPresence'
 import ColorPicker from '../ui/ColorPicker'
@@ -41,6 +44,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
     createWorkspace, createBoard, deleteWorkspace, updateWorkspace, fetchBoards,
     deleteBoard, updateBoard, createOrganization, updateOrganization, deleteOrganization, fetchWorkspaces,
     ensurePrivateWorkspace,
+    fetchWorkspaceNotes, createNote, updateNote, deleteNote,
   } = useSupabase()
   const [expandedWorkspaces, setExpandedWorkspaces] = useState(() => {
     // Auto-expand workspace containing the saved board on initial load
@@ -77,25 +81,36 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
   const [editName, setEditName] = useState('')
   const [colorPicker, setColorPicker] = useState(null)
   const [workspacesLoaded, setWorkspacesLoaded] = useState(false)
+  const [workspacesOrgId, setWorkspacesOrgId] = useState(null) // track which org's workspaces we loaded
   const [privateWs, setPrivateWs] = useState(null)
   const [privateExpanded, setPrivateExpanded] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
-  const loadingStarted = useRef(false)
+  const [workspaceNotes, setWorkspaceNotes] = useState({}) // { [wsId]: [...notes] }
+  const [newNoteName, setNewNoteName] = useState('')
+  const [showNewNote, setShowNewNote] = useState(null) // workspaceId or null
+  const [showAddMenu, setShowAddMenu] = useState(null) // workspaceId or null
   const ctxRef = useRef(null)
   const orgDropdownRef = useRef(null)
 
   // Permissions
+  const { can, role: userRole } = usePermissions()
   const currentOrgMember = state.orgMembers.find(m => m.user_id === user?.id)
-  const userRole = currentOrgMember?.role || 'viewer'
-  const canCreateWorkspace = userRole === 'owner' || userRole === 'admin' || userRole === 'member'
-  const canEditWorkspace = userRole === 'owner' || userRole === 'admin'
-  const canCreateBoard = userRole !== 'viewer'
-  const canManageWorkspaces = canEditWorkspace // for context menu
+  const canCreateWorkspace = can('createWorkspace')
+  const canEditWorkspace = can('editWorkspace')
+  const canCreateBoard = can('createBoard')
+  const canDeleteBoard = can('deleteBoard')
+  const canCreateNote = can('createNote')
+  const canEditNote = can('editNote')
+  const canDeleteNote = can('deleteNote')
+  const canManageWorkspaces = canEditWorkspace
 
-  // Ensure private workspace exists
+  // Ensure private workspace exists & fetch its notes
   useEffect(() => {
     if (state.currentOrg && user) {
-      ensurePrivateWorkspace(state.currentOrg.id, user.id).then(ws => setPrivateWs(ws))
+      ensurePrivateWorkspace(state.currentOrg.id, user.id).then(ws => {
+        setPrivateWs(ws)
+        if (ws?.id) fetchNotesForWorkspace(ws.id)
+      })
     }
   }, [state.currentOrg?.id, user?.id])
 
@@ -109,26 +124,36 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
       })
   ).filter(ws => !ws.is_private)
 
-  // Track when workspaces fetch completes (loading: false->true->false)
+  // Track when workspaces are available for the current org
   useEffect(() => {
-    if (state.loading) {
-      loadingStarted.current = true
+    if (!state.currentOrg) return
+    const orgId = state.currentOrg.id
+    // If we switched orgs, reset loaded state
+    if (orgId !== workspacesOrgId) {
+      setWorkspacesLoaded(false)
+      setWorkspacesOrgId(orgId)
+      return
     }
-    if (!state.loading && loadingStarted.current) {
+    // Mark as loaded when workspaces exist for this org (or loading finished)
+    if (!workspacesLoaded && !state.loading) {
       setWorkspacesLoaded(true)
     }
-  }, [state.loading])
+  }, [state.currentOrg?.id, state.workspaces, state.loading])
 
-  // Close context menu
+  // Close context menu & add menu
   useEffect(() => {
     const close = (e) => {
       if (ctxRef.current && !ctxRef.current.contains(e.target)) {
         setCtxMenu(null)
         setColorPicker(null)
       }
+      // Close add menu if clicking outside it
+      if (!e.target.closest('.sidebar-add-menu')) {
+        setShowAddMenu(null)
+      }
     }
-    const closeOnScroll = () => { setCtxMenu(null); setColorPicker(null) }
-    const closeOnKey = (e) => { if (e.key === 'Escape') { setCtxMenu(null); setColorPicker(null) } }
+    const closeOnScroll = () => { setCtxMenu(null); setColorPicker(null); setShowAddMenu(null) }
+    const closeOnKey = (e) => { if (e.key === 'Escape') { setCtxMenu(null); setColorPicker(null); setShowAddMenu(null) } }
     document.addEventListener('mousedown', close)
     document.addEventListener('scroll', closeOnScroll, true)
     document.addEventListener('keydown', closeOnKey)
@@ -188,7 +213,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
     dispatch({ type: 'SET_CURRENT_ORG', payload: org })
     setShowOrgDropdown(false)
     setWorkspacesLoaded(false)
-    loadingStarted.current = false
+    setWorkspacesOrgId(null)
   }
 
   const handleRenameOrg = async (orgId) => {
@@ -251,11 +276,58 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
     setCtxMenu(null)
   }
 
+  // --- Notes CRUD ---
+  const handleCreateNote = async (workspaceId) => {
+    const title = newNoteName.trim() || 'Sin título'
+    const data = await createNote(user.id, state.currentOrg.id, workspaceId, title)
+    if (data) {
+      setNewNoteName('')
+      setShowNewNote(null)
+      setWorkspaceNotes(prev => ({ ...prev, [workspaceId]: [...(prev[workspaceId] || []), data] }))
+      // Open the new note
+      const workspace = state.workspaces.find(w => w.id === workspaceId) || privateWs
+      if (workspace) dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: workspace })
+      dispatch({ type: 'SET_CURRENT_BOARD', payload: { id: `__note__`, noteId: data.id, name: data.title, isNotes: true } })
+    }
+  }
+
+  const handleDeleteNote = async (noteId, workspaceId) => {
+    await deleteNote(noteId)
+    setWorkspaceNotes(prev => ({
+      ...prev,
+      [workspaceId]: (prev[workspaceId] || []).filter(n => n.id !== noteId),
+    }))
+    // If the deleted note was open, clear the board
+    if (state.currentBoard?.noteId === noteId) {
+      dispatch({ type: 'SET_CURRENT_BOARD', payload: null })
+    }
+    toast.success('Nota eliminada')
+    setDeleteConfirm(null)
+    setCtxMenu(null)
+  }
+
+  const handleRenameNote = async (noteId, workspaceId) => {
+    if (!editName.trim() || !editingId) { setEditingId(null); return }
+    await updateNote(noteId, { title: editName.trim() })
+    setWorkspaceNotes(prev => ({
+      ...prev,
+      [workspaceId]: (prev[workspaceId] || []).map(n => n.id === noteId ? { ...n, title: editName.trim() } : n),
+    }))
+    // Update current board name if this note is open
+    if (state.currentBoard?.noteId === noteId) {
+      dispatch({ type: 'SET_CURRENT_BOARD', payload: { ...state.currentBoard, name: editName.trim() } })
+    }
+    toast.success('Nombre actualizado')
+    setEditingId(null)
+    setEditingType(null)
+    setEditName('')
+  }
+
   // --- Rename (shared for workspace & board) ---
   const handleStartRename = (type, item) => {
     setEditingType(type)
     setEditingId(item.id)
-    setEditName(item.name)
+    setEditName(item.name || item.title || '')
     setCtxMenu(null)
   }
 
@@ -263,6 +335,15 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
     if (!editName.trim() || !editingId) { setEditingId(null); return }
     if (editingType === 'workspace') {
       await updateWorkspace(editingId, { name: editName.trim() })
+    } else if (editingType === 'note') {
+      // Note rename is handled per-workspace, find which workspace this note belongs to
+      for (const wsId of Object.keys(workspaceNotes)) {
+        const found = workspaceNotes[wsId]?.find(n => n.id === editingId)
+        if (found) {
+          await handleRenameNote(editingId, wsId)
+          return
+        }
+      }
     } else {
       await updateBoard(editingId, { name: editName.trim() })
     }
@@ -272,11 +353,18 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
     setEditName('')
   }
 
+  const fetchNotesForWorkspace = async (wsId) => {
+    if (!user || !state.currentOrg) return
+    const notes = await fetchWorkspaceNotes(user.id, state.currentOrg.id, wsId)
+    setWorkspaceNotes(prev => ({ ...prev, [wsId]: notes }))
+  }
+
   const toggleAndFetchWorkspace = (workspace) => {
     toggleWorkspace(workspace.id)
-    // Fetch boards for this workspace when expanding
+    // Fetch boards and notes for this workspace when expanding
     if (!expandedWorkspaces[workspace.id]) {
       fetchBoards(workspace.id)
+      fetchNotesForWorkspace(workspace.id)
     }
   }
 
@@ -445,7 +533,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
       )}
 
       {/* Workspaces */}
-      <div className="flex-1 overflow-y-auto px-2 py-2">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2">
         {!workspacesLoaded && (
           <SidebarSkeleton />
         )}
@@ -467,19 +555,32 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
         )}
 
         {showNewWorkspace && (
-          <div className="px-2 mb-2">
+          <div className="flex items-center gap-1 px-2 mb-2">
             <input
               autoFocus
               value={newWorkspaceName}
               onChange={(e) => setNewWorkspaceName(e.target.value)}
+              maxLength={50}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleCreateWorkspace()
-                if (e.key === 'Escape') setShowNewWorkspace(false)
+                if (e.key === 'Escape') { setShowNewWorkspace(false); setNewWorkspaceName('') }
               }}
-              onBlur={() => { if (!newWorkspaceName.trim()) setShowNewWorkspace(false) }}
+              onBlur={(e) => { if (!newWorkspaceName.trim() && !e.relatedTarget?.classList.contains('sidebar-add-btn') && !e.relatedTarget?.classList.contains('sidebar-cancel-btn')) setShowNewWorkspace(false) }}
               placeholder="Nombre del espacio..."
-              className="w-full px-2 py-1.5 text-sm rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              className="flex-1 min-w-0 px-2 py-1.5 text-sm rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
+            <button
+              onClick={handleCreateWorkspace}
+              className="sidebar-add-btn p-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => { setShowNewWorkspace(false); setNewWorkspaceName('') }}
+              className="sidebar-cancel-btn p-1.5 rounded-md bg-muted text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
 
@@ -496,6 +597,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
                     autoFocus
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
+                          maxLength={50}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleFinishRename()
                       if (e.key === 'Escape') { setEditingId(null); setEditName('') }
@@ -556,6 +658,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
                             autoFocus
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
+                          maxLength={50}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') handleFinishRename()
                               if (e.key === 'Escape') { setEditingId(null); setEditName('') }
@@ -591,8 +694,62 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
                     </div>
                   ))
                 }
-                {showNewBoard === workspace.id ? (
-                  <div className="px-1">
+                {/* Notes per workspace */}
+                {(workspaceNotes[workspace.id] || []).map(note => (
+                  <div
+                    key={note.id}
+                    className="flex items-center group/note"
+                    onContextMenu={(e) => openCtx(e, 'note', { ...note, name: note.title, workspace_id: workspace.id })}
+                  >
+                    {editingId === note.id && editingType === 'note' ? (
+                      <div className="flex-1 px-1">
+                        <input
+                          autoFocus
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          maxLength={50}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleFinishRename()
+                            if (e.key === 'Escape') { setEditingId(null); setEditName('') }
+                          }}
+                          onBlur={handleFinishRename}
+                          className="w-full px-2 py-0.5 text-xs rounded border border-ring bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        className={cn(
+                          'flex-1 flex items-center gap-2 px-2 py-1 rounded-md text-sm transition-colors min-w-0 cursor-pointer',
+                          state.currentBoard?.noteId === note.id
+                            ? 'bg-primary/10 text-primary font-medium'
+                            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                        )}
+                      >
+                        <div
+                          className="flex-1 flex items-center gap-2 min-w-0"
+                          onClick={() => {
+                            setShowNotes(true)
+                            dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: workspace })
+                            dispatch({ type: 'SET_CURRENT_BOARD', payload: { id: `__note__`, noteId: note.id, name: note.title, isNotes: true } })
+                          }}
+                        >
+                          <FileText className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{note.title || 'Sin título'}</span>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openCtxFromDots(e, 'note', { ...note, name: note.title, workspace_id: workspace.id }) }}
+                          className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors shrink-0 opacity-0 group-hover/note:opacity-100"
+                        >
+                          <MoreHorizontal className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Inline inputs for new board/note */}
+                {showNewBoard === workspace.id && (
+                  <div className="flex items-center gap-1 px-1">
                     <input
                       autoFocus
                       value={newBoardName}
@@ -601,19 +758,88 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
                         if (e.key === 'Enter') handleCreateBoard(workspace.id)
                         if (e.key === 'Escape') setShowNewBoard(null)
                       }}
-                      onBlur={() => { if (!newBoardName.trim()) setShowNewBoard(null) }}
+                      onBlur={(e) => { if (!newBoardName.trim() && !e.relatedTarget?.classList.contains('sidebar-add-btn') && !e.relatedTarget?.classList.contains('sidebar-cancel-btn')) setShowNewBoard(null) }}
+                      maxLength={50}
                       placeholder="Nombre del tablero..."
-                      className="w-full px-2 py-1 text-xs rounded border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                      className="flex-1 min-w-0 px-2 py-1 text-xs rounded border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                     />
+                    <button
+                      onClick={() => handleCreateBoard(workspace.id)}
+                      className="sidebar-add-btn p-1 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={() => { setShowNewBoard(null); setNewBoardName('') }}
+                      className="sidebar-cancel-btn p-1 rounded-md bg-muted text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
                   </div>
-                ) : (
-                  <button
-                    onClick={() => setShowNewBoard(workspace.id)}
-                    className="w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Agregar tablero</span>
-                  </button>
+                )}
+                {showNewNote === workspace.id && (
+                  <div className="flex items-center gap-1 px-1">
+                    <input
+                      autoFocus
+                      value={newNoteName}
+                      onChange={(e) => setNewNoteName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleCreateNote(workspace.id)
+                        if (e.key === 'Escape') { setShowNewNote(null); setNewNoteName('') }
+                      }}
+                      onBlur={(e) => { if (!newNoteName.trim() && !e.relatedTarget?.classList.contains('sidebar-add-btn') && !e.relatedTarget?.classList.contains('sidebar-cancel-btn')) setShowNewNote(null) }}
+                      maxLength={50}
+                      placeholder="Nombre de la nota..."
+                      className="flex-1 min-w-0 px-2 py-1 text-xs rounded border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    <button
+                      onClick={() => handleCreateNote(workspace.id)}
+                      className="sidebar-add-btn p-1 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={() => { setShowNewNote(null); setNewNoteName('') }}
+                      className="sidebar-cancel-btn p-1 rounded-md bg-muted text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Single "Agregar" button with dropdown */}
+                {(canCreateBoard || canCreateNote) && showNewBoard !== workspace.id && showNewNote !== workspace.id && (
+                  <div className="relative sidebar-add-menu">
+                    <button
+                      onClick={() => setShowAddMenu(showAddMenu === workspace.id ? null : workspace.id)}
+                      className="w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Agregar</span>
+                    </button>
+                    {showAddMenu === workspace.id && (
+                      <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-border bg-popover shadow-lg py-1 animate-scale-in">
+                        {canCreateBoard && (
+                          <button
+                            onClick={() => { setShowAddMenu(null); setShowNewBoard(workspace.id) }}
+                            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-foreground hover:bg-accent transition-colors"
+                          >
+                            <LayoutGrid className="w-3.5 h-3.5 text-muted-foreground" />
+                            Tablero
+                          </button>
+                        )}
+                        {canCreateNote && (
+                          <button
+                            onClick={() => { setShowAddMenu(null); setShowNewNote(workspace.id) }}
+                            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-foreground hover:bg-accent transition-colors"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-muted-foreground" />
+                            Nota
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -643,6 +869,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
                       autoFocus
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
+                          maxLength={50}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') { handleFinishRename(); setPrivateWs(prev => ({ ...prev, boards: prev.boards.map(b => b.id === board.id ? { ...b, name: editName.trim() } : b) })) }
                         if (e.key === 'Escape') { setEditingId(null); setEditName('') }
@@ -675,25 +902,97 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
               </div>
             ))}
 
-            {/* Notes */}
-            <div className="mb-0.5">
+            {/* Notes — private workspace */}
+            {(workspaceNotes[privateWs.id] || []).map(note => (
               <div
-                className={cn(
-                  'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors cursor-pointer ml-2',
-                  state.currentBoard?.isNotes
-                    ? 'bg-primary/10 text-primary font-medium'
-                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                )}
-                onClick={() => {
-                  setShowNotes(true)
-                  dispatch({ type: 'SET_CURRENT_BOARD', payload: { id: '__notes__', name: 'Notas', isNotes: true } })
-                  dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: null })
-                }}
+                key={note.id}
+                className="mb-0.5 flex items-center group/pnote"
+                onContextMenu={(e) => openCtx(e, 'note', { ...note, name: note.title, workspace_id: privateWs.id })}
               >
-                <FileText className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">Notas</span>
+                {editingId === note.id && editingType === 'note' ? (
+                  <div className="flex-1 px-1 ml-2">
+                    <input
+                      autoFocus
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                          maxLength={50}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleFinishRename()
+                        if (e.key === 'Escape') { setEditingId(null); setEditName('') }
+                      }}
+                      onBlur={handleFinishRename}
+                      className="w-full px-2 py-0.5 text-xs rounded border border-ring bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className={cn(
+                      'flex-1 flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors cursor-pointer ml-2',
+                      state.currentBoard?.noteId === note.id
+                        ? 'bg-primary/10 text-primary font-medium'
+                        : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                    )}
+                  >
+                    <div
+                      className="flex-1 flex items-center gap-2 min-w-0"
+                      onClick={() => {
+                        setShowNotes(true)
+                        dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: privateWs })
+                        dispatch({ type: 'SET_CURRENT_BOARD', payload: { id: `__note__`, noteId: note.id, name: note.title, isNotes: true } })
+                      }}
+                    >
+                      <FileText className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{note.title || 'Sin título'}</span>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openCtxFromDots(e, 'note', { ...note, name: note.title, workspace_id: privateWs.id }) }}
+                      className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors shrink-0 opacity-0 group-hover/pnote:opacity-100"
+                    >
+                      <MoreHorizontal className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
+            ))}
+
+            {/* Add note — private */}
+            {showNewNote === privateWs.id ? (
+              <div className="flex items-center gap-1 px-1 ml-2 mb-1">
+                <input
+                  autoFocus
+                  value={newNoteName}
+                  onChange={(e) => setNewNoteName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleCreateNote(privateWs.id)
+                    if (e.key === 'Escape') { setShowNewNote(null); setNewNoteName('') }
+                  }}
+                  onBlur={(e) => { if (!newNoteName.trim() && !e.relatedTarget?.classList.contains('sidebar-add-btn') && !e.relatedTarget?.classList.contains('sidebar-cancel-btn')) setShowNewNote(null) }}
+                  maxLength={50}
+                  placeholder="Nombre de la nota..."
+                  className="flex-1 min-w-0 px-2 py-1 text-xs rounded border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+                <button
+                  onClick={() => handleCreateNote(privateWs.id)}
+                  className="sidebar-add-btn p-1 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
+                >
+                  <Plus className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => { setShowNewNote(null); setNewNoteName('') }}
+                  className="sidebar-cancel-btn p-1 rounded-md bg-muted text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowNewNote(privateWs.id)}
+                className="w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors ml-2"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Agregar nota</span>
+              </button>
+            )}
           </>
         )}
 
@@ -703,7 +1002,20 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
       {state.currentOrg && <TeamPresence />}
 
       {/* ========== CONTEXT MENU ========== */}
-      {ctxMenu && ctxMenu.data && (
+      {ctxMenu && ctxMenu.data && (() => {
+        // Check if this item belongs to the private workspace (bypass permissions)
+        const isPrivateItem = ctxMenu.type === 'board'
+          ? privateWs?.boards?.some(b => b.id === ctxMenu.id)
+          : ctxMenu.type === 'note'
+            ? ctxMenu.data.workspace_id === privateWs?.id
+            : false
+        const canRename = isPrivateItem || (ctxMenu.type === 'workspace' ? canEditWorkspace : ctxMenu.type === 'board' ? can('editBoard') : can('editNote'))
+        const canDelete = isPrivateItem
+          ? ctxMenu.type === 'note' // private: can delete notes but not the default board
+          : ctxMenu.type === 'workspace' ? can('deleteWorkspace') : ctxMenu.type === 'board' ? canDeleteBoard : canDeleteNote
+        const canConfigBoard = isPrivateItem || can('editBoard')
+
+        return (
         <div
           ref={ctxRef}
           className="fixed z-[100] w-52 rounded-xl border border-border bg-popover shadow-xl py-1.5 animate-scale-in"
@@ -721,29 +1033,35 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
               >
                 {ctxMenu.data.name?.[0]?.toUpperCase()}
               </div>
+            ) : ctxMenu.type === 'note' ? (
+              <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
             ) : (
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground shrink-0"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg>
             )}
-            <span className="text-xs font-semibold text-foreground truncate">{ctxMenu.data.name}</span>
+            <span className="text-xs font-semibold text-foreground truncate">{ctxMenu.data.name || ctxMenu.data.title}</span>
           </div>
 
           {/* Common actions */}
           <div className="py-1">
-            <CtxMenuItem
-              icon={Pencil}
-              label="Renombrar"
-              onClick={() => handleStartRename(ctxMenu.type, ctxMenu.data)}
-            />
+            {canRename && (
+              <CtxMenuItem
+                icon={Pencil}
+                label="Renombrar"
+                onClick={() => handleStartRename(ctxMenu.type, ctxMenu.data)}
+              />
+            )}
 
             {/* Workspace-only actions */}
             {ctxMenu.type === 'workspace' && (
               <>
-                <CtxMenuItem
-                  icon={Palette}
-                  label="Cambiar color"
-                  onClick={() => setColorPicker(colorPicker === ctxMenu.id ? null : ctxMenu.id)}
-                  hasSubmenu
-                />
+                {canEditWorkspace && (
+                  <CtxMenuItem
+                    icon={Palette}
+                    label="Cambiar color"
+                    onClick={() => setColorPicker(colorPicker === ctxMenu.id ? null : ctxMenu.id)}
+                    hasSubmenu
+                  />
+                )}
                 {colorPicker === ctxMenu.id && (
                   <div className="px-3 py-2">
                     <ColorPicker
@@ -764,16 +1082,20 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
             {/* Board-only actions */}
             {ctxMenu.type === 'board' && (
               <>
-                <CtxMenuItem
-                  icon={Settings2}
-                  label="Configurar estados"
-                  onClick={() => { dispatch({ type: 'SHOW_STATUS_CONFIG', payload: ctxMenu.data }); setCtxMenu(null) }}
-                />
-                <CtxMenuItem
-                  icon={Puzzle}
-                  label="Campos personalizados"
-                  onClick={() => { dispatch({ type: 'SHOW_CUSTOM_FIELDS', payload: ctxMenu.data }); setCtxMenu(null) }}
-                />
+                {canConfigBoard && (
+                  <>
+                    <CtxMenuItem
+                      icon={Settings2}
+                      label="Configurar estados"
+                      onClick={() => { dispatch({ type: 'SHOW_STATUS_CONFIG', payload: ctxMenu.data }); setCtxMenu(null) }}
+                    />
+                    <CtxMenuItem
+                      icon={Puzzle}
+                      label="Campos personalizados"
+                      onClick={() => { dispatch({ type: 'SHOW_CUSTOM_FIELDS', payload: ctxMenu.data }); setCtxMenu(null) }}
+                    />
+                  </>
+                )}
                 <CtxMenuItem
                   icon={Copy}
                   label="Copiar ID"
@@ -783,30 +1105,49 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
             )}
           </div>
 
-          {/* Destructive zone — hide for private boards */}
-          {!(ctxMenu.type === 'board' && privateWs?.boards?.some(b => b.id === ctxMenu.id)) && (
+          {/* Destructive zone */}
+          {canDelete && (
             <>
               <div className="h-px bg-border mx-2 my-1" />
               <div className="py-1">
-                <button
-                  onClick={() => {
-                    setDeleteConfirm({
-                      type: ctxMenu.type,
-                      id: ctxMenu.id,
-                      name: ctxMenu.data.name,
-                    })
-                    setCtxMenu(null)
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Eliminar {ctxMenu.type === 'workspace' ? 'espacio de trabajo' : 'tablero'}
-                </button>
+                {ctxMenu.type === 'note' ? (
+                  <button
+                    onClick={() => {
+                      setDeleteConfirm({
+                        type: 'note',
+                        id: ctxMenu.id,
+                        name: ctxMenu.data.name || ctxMenu.data.title,
+                        workspaceId: ctxMenu.data.workspace_id,
+                      })
+                      setCtxMenu(null)
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Eliminar nota
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setDeleteConfirm({
+                        type: ctxMenu.type,
+                        id: ctxMenu.id,
+                        name: ctxMenu.data.name,
+                      })
+                      setCtxMenu(null)
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Eliminar {ctxMenu.type === 'workspace' ? 'espacio de trabajo' : 'tablero'}
+                  </button>
+                )}
               </div>
             </>
           )}
         </div>
-      )}
+        )
+      })()}
 
       {/* ========== DELETE ORG CONFIRMATION ========== */}
       {deleteOrgConfirm && (
@@ -825,6 +1166,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
           name={deleteConfirm.name}
           onConfirm={() => {
             if (deleteConfirm.type === 'workspace') handleDeleteWorkspace(deleteConfirm.id)
+            else if (deleteConfirm.type === 'note') handleDeleteNote(deleteConfirm.id, deleteConfirm.workspaceId)
             else handleDeleteBoard(deleteConfirm.id)
           }}
           onCancel={() => setDeleteConfirm(null)}
@@ -849,6 +1191,8 @@ function CtxMenuItem({ icon: Icon, label, onClick, hasSubmenu }) {
 
 function DeleteConfirmModal({ type, name, onConfirm, onCancel }) {
   const isWorkspace = type === 'workspace'
+  const isNote = type === 'note'
+  const typeLabel = isWorkspace ? 'espacio' : isNote ? 'nota' : 'tablero'
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={onCancel} />
@@ -859,16 +1203,18 @@ function DeleteConfirmModal({ type, name, onConfirm, onCancel }) {
           </div>
           <div>
             <h3 className="font-semibold text-foreground">
-              Eliminar {isWorkspace ? 'espacio' : 'tablero'}
+              Eliminar {typeLabel}
             </h3>
             <p className="text-xs text-muted-foreground">Esta accion no se puede deshacer</p>
           </div>
         </div>
         <p className="text-sm text-muted-foreground mb-1">
-          Se eliminara permanentemente {isWorkspace ? 'el espacio de trabajo' : 'el tablero'}{' '}
+          Se eliminara permanentemente {isWorkspace ? 'el espacio de trabajo' : isNote ? 'la nota' : 'el tablero'}{' '}
           <span className="font-semibold text-foreground">"{name}"</span>
           {isWorkspace
             ? ' junto con todos sus tableros, sprints, tareas y miembros.'
+            : isNote
+            ? ' y todo su contenido.'
             : ' junto con todos sus sprints y tareas.'
           }
         </p>

@@ -6,6 +6,7 @@ import { useSupabase } from '../../hooks/useSupabase'
 import { supabase } from '../../lib/supabase'
 import { toast } from 'sonner'
 import { FIELD_ICONS, resolveFieldIcon } from '../../lib/fieldIcons'
+import { usePermissions } from '../../hooks/usePermissions'
 
 const CHUNK = 200
 
@@ -127,6 +128,8 @@ const FIELD_TYPES = [
 export default function CustomFieldsConfigModal({ open, onClose, boardId: propBoardId }) {
   const { state, dispatch } = useApp()
   const { createCustomField, updateCustomField, deleteCustomField, addCustomFieldOption, deleteCustomFieldOption, fetchCustomFields } = useSupabase()
+  const { can } = usePermissions()
+  const canManage = can('manageCustomFields')
   const [mode, setMode] = useState('list') // list | create | edit | share
   const [editingField, setEditingField] = useState(null)
   const [form, setForm] = useState({ name: '', type: 'text', options: [], icon: null })
@@ -185,7 +188,7 @@ export default function CustomFieldsConfigModal({ open, onClose, boardId: propBo
   }
 
   const handleCreate = async () => {
-    if (!form.name.trim() || !boardId) return
+    if (!canManage || !form.name.trim() || !boardId) return
     const { error } = await createCustomField(boardId, {
       name: form.name.trim(),
       type: form.type,
@@ -198,7 +201,7 @@ export default function CustomFieldsConfigModal({ open, onClose, boardId: propBo
   }
 
   const handleUpdate = async () => {
-    if (!editingField || !form.name.trim()) return
+    if (!canManage || !editingField || !form.name.trim()) return
     await updateCustomField(editingField.id, { name: form.name.trim(), icon: form.icon || null })
     // Handle dropdown options: delete removed, add new
     if (editingField.type === 'dropdown') {
@@ -219,7 +222,7 @@ export default function CustomFieldsConfigModal({ open, onClose, boardId: propBo
   }
 
   const handleDelete = async () => {
-    if (!confirmDelete) return
+    if (!canManage || !confirmDelete) return
     const { error } = await deleteCustomField(confirmDelete.id)
     if (!error) toast.success('Campo eliminado')
     else toast.error('Error al eliminar')

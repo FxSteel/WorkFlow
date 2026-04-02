@@ -93,6 +93,14 @@
   opacity: 0.3;
 }
 
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
 @keyframes slideInRight {
   from { transform: translateX(100%); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
@@ -115,33 +123,47 @@
   animation: scaleIn 0.2s ease-out;
 }
 
-/* Tiptap Editor */
+/* ═══ Notion-style Editor ═══════════════════════════════════════════════════ */
 .block-editor .tiptap {
   outline: none;
   min-height: 60px;
 }
+.block-editor .tiptap > * + * {
+  margin-top: 0.35em;
+}
 .block-editor .tiptap p {
-  margin: 0.25em 0;
-  font-size: 0.875rem;
-  line-height: 1.625;
+  margin: 0.15em 0;
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: var(--color-foreground);
 }
 .block-editor .tiptap h1 {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 700;
-  margin: 0.5em 0 0.25em;
+  margin: 1em 0 0.25em;
+  line-height: 1.3;
   color: var(--color-foreground);
+  letter-spacing: -0.02em;
 }
 .block-editor .tiptap h2 {
-  font-size: 1.25rem;
+  font-size: 1.375rem;
   font-weight: 600;
-  margin: 0.5em 0 0.25em;
+  margin: 0.8em 0 0.2em;
+  line-height: 1.35;
   color: var(--color-foreground);
+  letter-spacing: -0.01em;
 }
 .block-editor .tiptap h3 {
-  font-size: 1.1rem;
+  font-size: 1.125rem;
   font-weight: 600;
-  margin: 0.4em 0 0.2em;
+  margin: 0.6em 0 0.15em;
+  line-height: 1.4;
   color: var(--color-foreground);
+}
+.block-editor .tiptap h1:first-child,
+.block-editor .tiptap h2:first-child,
+.block-editor .tiptap h3:first-child {
+  margin-top: 0;
 }
 .block-editor .tiptap ul:not([data-type="taskList"]) {
   list-style-type: disc;
@@ -216,11 +238,10 @@
   color: var(--color-muted-foreground);
 }
 .block-editor .tiptap blockquote {
-  border-left: 3px solid var(--color-border);
-  padding-left: 0.75rem;
+  border-left: 3px solid var(--color-foreground);
+  padding: 0.25rem 0 0.25rem 1rem;
   margin: 0.5em 0;
   color: var(--color-muted-foreground);
-  font-style: italic;
 }
 .block-editor .tiptap blockquote p {
   margin: 0;
@@ -397,11 +418,293 @@
   color: var(--color-muted-foreground);
   margin: 0.25em 0 0;
 }
-.block-editor .tiptap a {
+.block-editor .tiptap a,
+.block-editor .tiptap .notion-link {
   color: var(--color-primary);
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
+  transition: text-decoration-color 0.15s;
+  cursor: pointer;
 }
-.block-editor .tiptap a:hover {
-  opacity: 0.8;
+.block-editor .tiptap a:hover,
+.block-editor .tiptap .notion-link:hover {
+  text-decoration-color: var(--color-primary);
+}
+
+/* ─── Notion Bubble Menu ──────────────────────────────────────────────────── */
+.notion-bubble-menu {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-popover);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px -2px rgba(0,0,0,0.12), 0 2px 6px -1px rgba(0,0,0,0.08);
+  padding: 4px;
+  gap: 4px;
+  animation: scaleIn 0.15s ease-out;
+}
+.notion-link-input {
+  border-top: 1px solid var(--color-border);
+  padding: 6px 4px 4px;
+}
+.notion-link-input-field {
+  width: 240px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-muted);
+  color: var(--color-foreground);
+  font-size: 0.8rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.notion-link-input-field:focus {
+  border-color: var(--color-primary);
+}
+.notion-link-input-field::placeholder {
+  color: var(--color-muted-foreground);
+}
+.notion-color-picker {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-popover);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px -2px rgba(0,0,0,0.12);
+  z-index: 999;
+  animation: scaleIn 0.12s ease-out;
+  min-width: 170px;
+}
+.notion-color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.1s;
+  background: transparent;
+}
+.notion-color-swatch:hover {
+  border-color: var(--color-foreground);
+  transform: scale(1.1);
+}
+
+/* ─── Notion Callout ──────────────────────────────────────────────────────── */
+.notion-callout {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  margin: 0.5em 0;
+  border-radius: 0.5rem;
+  border: 1px solid;
+}
+.notion-callout-info {
+  background: rgba(96,165,250,0.08);
+  border-color: rgba(96,165,250,0.25);
+}
+.notion-callout-warning {
+  background: rgba(251,191,36,0.08);
+  border-color: rgba(251,191,36,0.25);
+}
+.notion-callout-success {
+  background: rgba(74,222,128,0.08);
+  border-color: rgba(74,222,128,0.25);
+}
+.notion-callout-error {
+  background: rgba(248,113,113,0.08);
+  border-color: rgba(248,113,113,0.25);
+}
+.notion-callout-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+  margin-top: 2px;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  transition: background 0.1s;
+  background: none;
+  border: none;
+  flex-shrink: 0;
+}
+.notion-callout-icon:hover {
+  background: var(--color-accent);
+}
+.notion-callout-content {
+  flex: 1;
+  min-width: 0;
+}
+.notion-callout-content p {
+  margin: 0 !important;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+.notion-callout-picker {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: var(--color-popover);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px -2px rgba(0,0,0,0.15);
+  padding: 4px;
+  z-index: 50;
+  animation: scaleIn 0.12s ease-out;
+  min-width: 140px;
+}
+.notion-callout-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--color-foreground);
+  cursor: pointer;
+  border: none;
+  background: none;
+  transition: background 0.1s;
+}
+.notion-callout-picker-item:hover,
+.notion-callout-picker-item.active {
+  background: var(--color-accent);
+}
+
+/* ─── Notion Toggle ───────────────────────────────────────────────────────── */
+.notion-toggle {
+  margin: 0.5em 0;
+  border-radius: 0.5rem;
+}
+.notion-toggle-header {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.notion-toggle-arrow {
+  padding: 2px;
+  border-radius: 4px;
+  color: var(--color-muted-foreground);
+  cursor: pointer;
+  transition: all 0.15s;
+  background: none;
+  border: none;
+  flex-shrink: 0;
+}
+.notion-toggle-arrow:hover {
+  background: var(--color-accent);
+  color: var(--color-foreground);
+}
+.notion-toggle-summary {
+  flex: 1;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-foreground);
+  background: none;
+  border: none;
+  outline: none;
+  padding: 4px 0;
+  line-height: 1.5;
+}
+.notion-toggle-summary::placeholder {
+  color: var(--color-muted-foreground);
+  opacity: 0.6;
+}
+.notion-toggle-content {
+  padding-left: 1.5rem;
+  border-left: 2px solid var(--color-border);
+  margin-left: 9px;
+  transition: all 0.2s ease;
+  overflow: visible;
+}
+.notion-toggle-content p {
+  font-size: 0.875rem;
+}
+.notion-toggle-collapsed {
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  margin: 0;
+  padding: 0;
+  border-left-color: transparent;
+}
+
+/* ─── Notion Tables ───────────────────────────────────────────────────────── */
+.block-editor .tiptap table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75em 0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  font-size: 0.875rem;
+}
+.block-editor .tiptap table td,
+.block-editor .tiptap table th {
+  border: 1px solid var(--color-border);
+  padding: 0.5rem 0.75rem;
+  min-width: 80px;
+  vertical-align: top;
+  position: relative;
+}
+.block-editor .tiptap table th {
+  background: var(--color-muted);
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--color-muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.block-editor .tiptap table td p,
+.block-editor .tiptap table th p {
+  margin: 0;
+}
+.block-editor .tiptap table .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--color-primary);
+  opacity: 0.08;
+  pointer-events: none;
+}
+.block-editor .tiptap table .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--color-primary);
+  opacity: 0;
+  cursor: col-resize;
+  transition: opacity 0.15s;
+}
+.block-editor .tiptap table .column-resize-handle:hover,
+.block-editor .tiptap .resize-cursor .column-resize-handle {
+  opacity: 0.6;
+}
+.block-editor .tiptap .tableWrapper {
+  overflow-x: auto;
+  margin: 0.75em 0;
+}
+
+/* ─── Improved HR ─────────────────────────────────────────────────────────── */
+.block-editor .tiptap hr {
+  border: none;
+  height: 1px;
+  background: var(--color-border);
+  margin: 1.5em 0;
+}
+
+/* ─── Text alignment ──────────────────────────────────────────────────────── */
+.block-editor .tiptap [style*="text-align: center"] { text-align: center; }
+.block-editor .tiptap [style*="text-align: right"] { text-align: right; }
+
+/* ─── Mark: Underline ─────────────────────────────────────────────────────── */
+.block-editor .tiptap u {
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, currentColor 50%, transparent);
 }

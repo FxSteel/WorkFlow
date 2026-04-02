@@ -44,6 +44,7 @@ export default function InviteNotifications() {
       user.email,
       invite.role,
       invite.workspace_ids,
+      invite.custom_permissions,
     )
     if (!error) {
       setInvites(prev => prev.filter(i => i.id !== invite.id))

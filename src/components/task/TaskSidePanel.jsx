@@ -18,14 +18,19 @@ import { STATUS_OPTIONS, STATUS_COLORS, PRIORITY_OPTIONS } from '../../lib/const
 import { useNotifications } from '../../hooks/useNotifications'
 import { resolveFieldIcon } from '../../lib/fieldIcons'
 import { toast } from 'sonner'
+import { usePermissions } from '../../hooks/usePermissions'
 
 export default function TaskSidePanel() {
   const { state, dispatch, closeSidePanel } = useApp()
   const { user } = useAuth()
+  const { can } = usePermissions()
   const { notifyTaskAssigned, notifyStatusChange, notifyPriorityChange, notifyTaskCompleted } = useNotifications()
   const { updateTask, deleteTask, createTask, setCustomFieldValue, logTaskActivity } = useSupabase()
   const task = state.sidePanelTask
   const isNew = task && !task.id
+  const canEdit = can('editTask')
+  const canDelete = can('deleteTask')
+  const canCreate = can('createTask')
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -111,13 +116,14 @@ export default function TaskSidePanel() {
       dispatch({ type: 'OPEN_SIDE_PANEL', payload: { ...task, ...updates } })
       return
     }
+    if (!canEdit) return
     showSaving()
     await updateTask(task.id, updates)
     showSaved()
   }
 
   const handleTitleBlur = async () => {
-    if (isNew || !title.trim() || title.trim() === task.title) return
+    if (isNew || !canEdit || !title.trim() || title.trim() === task.title) return
     const oldTitle = task.title
     showSaving()
     await updateTask(task.id, { title: title.trim() })
@@ -126,7 +132,7 @@ export default function TaskSidePanel() {
   }
 
   const handleDescBlur = async () => {
-    if (isNew || description === task.description) return
+    if (isNew || !canEdit || description === task.description) return
     showSaving()
     await updateTask(task.id, { description })
     showSaved()
@@ -202,7 +208,7 @@ export default function TaskSidePanel() {
           )}
         </div>
         <div className="flex items-center gap-1">
-          {!isNew && (
+          {!isNew && canDelete && (
             <button
               onClick={() => setShowDeleteConfirm(true)}
               className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
@@ -552,7 +558,7 @@ export default function TaskSidePanel() {
       </div>
 
       {/* Footer for new tasks */}
-      {isNew && (
+      {isNew && canCreate && (
         <div className="px-5 py-3 border-t border-border">
           <button
             onClick={handleCreate}

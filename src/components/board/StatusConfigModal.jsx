@@ -4,11 +4,13 @@ import { useApp } from '../../context/AppContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import { supabase } from '../../lib/supabase'
 import { toast } from 'sonner'
-
+import { usePermissions } from '../../hooks/usePermissions'
 
 export default function StatusConfigModal({ open, onClose, boardId: propBoardId }) {
   const { state, dispatch } = useApp()
   const { createBoardStatus, updateBoardStatus, deleteBoardStatus, fetchBoardStatuses } = useSupabase()
+  const { can } = usePermissions()
+  const canEditStatuses = can('editStatuses')
   const [editingId, setEditingId] = useState(null)
   const [editName, setEditName] = useState('')
   const [newName, setNewName] = useState('')
@@ -36,7 +38,7 @@ export default function StatusConfigModal({ open, onClose, boardId: propBoardId 
   const statuses = isSameBoard ? (state.boardStatuses || []) : localStatuses
 
   const handleUpdateName = async (id) => {
-    if (!editName.trim()) { setEditingId(null); return }
+    if (!canEditStatuses || !editName.trim()) { setEditingId(null); return }
     const status = statuses.find(s => s.id === id)
     if (status && editName.trim() !== status.name) {
       const oldName = status.name
@@ -61,12 +63,13 @@ export default function StatusConfigModal({ open, onClose, boardId: propBoardId 
   }
 
   const handleUpdateColor = async (id, color) => {
+    if (!canEditStatuses) return
     await updateBoardStatus(id, { color })
     toast.success('Color actualizado')
   }
 
   const handleCreate = async () => {
-    if (!newName.trim() || !boardId) return
+    if (!canEditStatuses || !newName.trim() || !boardId) return
     await createBoardStatus(boardId, newName.trim(), newColor, statuses.length)
     toast.success('Estado creado')
     setNewName('')
@@ -75,6 +78,7 @@ export default function StatusConfigModal({ open, onClose, boardId: propBoardId 
   }
 
   const handleDelete = async (id) => {
+    if (!canEditStatuses) return
     await deleteBoardStatus(id)
     toast.success('Estado eliminado')
     setDeleteConfirm(null)

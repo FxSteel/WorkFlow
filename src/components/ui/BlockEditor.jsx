@@ -1,22 +1,42 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useEditor, EditorContent, NodeViewWrapper, NodeViewContent, ReactNodeViewRenderer } from '@tiptap/react'
+import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import ImageExt from '@tiptap/extension-image'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import TiptapUnderline from '@tiptap/extension-underline'
+import TiptapHighlight from '@tiptap/extension-highlight'
+import TiptapLink from '@tiptap/extension-link'
+import { TextStyle } from '@tiptap/extension-text-style'
+import { Color as TiptapColor } from '@tiptap/extension-color'
+import { TextAlign } from '@tiptap/extension-text-align'
+import { Table } from '@tiptap/extension-table'
+import { TableRow } from '@tiptap/extension-table-row'
+import { TableCell } from '@tiptap/extension-table-cell'
+import { TableHeader } from '@tiptap/extension-table-header'
+import { Node, mergeAttributes } from '@tiptap/core'
 import { common, createLowlight } from 'lowlight'
 import {
   Type, Heading1, Heading2, Heading3, List, ListOrdered,
-  CheckSquare, Quote, Minus, Code, Plus, ChevronDown, Copy, Check,
+  CheckSquare, Quote, Minus, Code, ChevronDown, ChevronRight, Copy, Check,
   Image as ImageIcon, Video, Volume2, FileText, Loader2,
   X, Maximize2, Download, ExternalLink, Trash2,
+  Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code2,
+  Link as LinkIcon, Unlink,
+  AlignLeft, AlignCenter, AlignRight,
+  Palette, Highlighter,
+  Table as TableIcon, Info, AlertTriangle, CheckCircle2, XCircle,
+  ToggleRight,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
 import { toast } from 'sonner'
+
+// ─── Constants ───────────────────────────────────────────────────────────────
 
 const lowlight = createLowlight(common)
 
@@ -46,10 +66,292 @@ const LANGUAGES = [
   { value: 'graphql', label: 'GraphQL' },
 ]
 
+const TEXT_COLORS = [
+  { name: 'Predeterminado', color: null },
+  { name: 'Gris', color: '#9ca3af' },
+  { name: 'Marrón', color: '#a16207' },
+  { name: 'Naranja', color: '#ea580c' },
+  { name: 'Amarillo', color: '#ca8a04' },
+  { name: 'Verde', color: '#16a34a' },
+  { name: 'Azul', color: '#2563eb' },
+  { name: 'Morado', color: '#9333ea' },
+  { name: 'Rosa', color: '#db2777' },
+  { name: 'Rojo', color: '#dc2626' },
+]
+
+const HIGHLIGHT_COLORS = [
+  { name: 'Sin fondo', color: null },
+  { name: 'Gris', color: 'rgba(148,163,184,0.2)' },
+  { name: 'Naranja', color: 'rgba(251,146,60,0.2)' },
+  { name: 'Amarillo', color: 'rgba(250,204,21,0.25)' },
+  { name: 'Verde', color: 'rgba(74,222,128,0.2)' },
+  { name: 'Azul', color: 'rgba(96,165,250,0.2)' },
+  { name: 'Morado', color: 'rgba(192,132,252,0.2)' },
+  { name: 'Rosa', color: 'rgba(244,114,182,0.2)' },
+  { name: 'Rojo', color: 'rgba(248,113,113,0.2)' },
+]
+
+const CALLOUT_VARIANTS = {
+  info:    { icon: '💡', label: 'Información' },
+  warning: { icon: '⚠️', label: 'Advertencia' },
+  success: { icon: '✅', label: 'Éxito' },
+  error:   { icon: '🚫', label: 'Error' },
+}
+
+// ─── Custom TipTap Extensions ────────────────────────────────────────────────
+
+const Callout = Node.create({
+  name: 'callout',
+  group: 'block',
+  content: 'block+',
+  defining: true,
+
+  addAttributes() {
+    return {
+      variant: {
+        default: 'info',
+        parseHTML: el => el.getAttribute('data-variant') || 'info',
+        renderHTML: attrs => ({ 'data-variant': attrs.variant }),
+      },
+    }
+  },
+
+  parseHTML() {
+    return [{ tag: 'div[data-type="callout"]' }]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'callout' }), 0]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(CalloutNodeView)
+  },
+
+  addCommands() {
+    return {
+      setCallout: (attrs) => ({ commands }) => {
+        return commands.insertContent({
+          type: this.name,
+          attrs,
+          content: [{ type: 'paragraph' }],
+        })
+      },
+    }
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      // Enter at end of last empty paragraph → exit callout, insert paragraph after
+      Enter: ({ editor }) => {
+        if (!editor.isActive('callout')) return false
+        const { $from, empty } = editor.state.selection
+        if (!empty) return false
+        // Check if cursor is in an empty paragraph inside the callout
+        const parentParagraph = $from.parent
+        if (parentParagraph.type.name !== 'paragraph' || parentParagraph.textContent.length > 0) return false
+        // Check if it's the last child of the callout
+        const calloutDepth = $from.depth - 1
+        const calloutNode = $from.node(calloutDepth)
+        const indexInCallout = $from.index(calloutDepth)
+        if (indexInCallout < calloutNode.childCount - 1) return false
+        // If callout only has one empty paragraph, delete the whole callout
+        if (calloutNode.childCount === 1) {
+          const pos = $from.before(calloutDepth)
+          editor.chain().focus().deleteRange({ from: pos, to: pos + calloutNode.nodeSize }).insertContentAt(pos, { type: 'paragraph' }).run()
+          return true
+        }
+        // Otherwise delete the empty paragraph and insert one after the callout
+        const emptyParaPos = $from.before()
+        const afterCallout = $from.after(calloutDepth)
+        editor.chain().focus().deleteRange({ from: emptyParaPos, to: emptyParaPos + parentParagraph.nodeSize }).insertContentAt(afterCallout - parentParagraph.nodeSize, { type: 'paragraph' }).run()
+        return true
+      },
+      // Backspace on empty callout → delete it
+      Backspace: ({ editor }) => {
+        if (!editor.isActive('callout')) return false
+        const { $from, empty } = editor.state.selection
+        if (!empty) return false
+        const calloutDepth = $from.depth - 1
+        const calloutNode = $from.node(calloutDepth)
+        // Only if callout has a single empty paragraph
+        if (calloutNode.childCount === 1 && calloutNode.firstChild.textContent.length === 0) {
+          const pos = $from.before(calloutDepth)
+          editor.chain().focus().deleteRange({ from: pos, to: pos + calloutNode.nodeSize }).insertContentAt(pos, { type: 'paragraph' }).run()
+          return true
+        }
+        return false
+      },
+    }
+  },
+})
+
+const ToggleBlock = Node.create({
+  name: 'toggleBlock',
+  group: 'block',
+  content: 'block+',
+  defining: true,
+
+  addAttributes() {
+    return {
+      summary: {
+        default: '',
+        parseHTML: el => el.getAttribute('data-summary') || '',
+        renderHTML: attrs => ({ 'data-summary': attrs.summary }),
+      },
+    }
+  },
+
+  parseHTML() {
+    return [{ tag: 'div[data-type="toggle"]' }]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'toggle' }), 0]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(ToggleNodeView)
+  },
+
+  addCommands() {
+    return {
+      setToggle: (attrs) => ({ commands }) => {
+        return commands.insertContent({
+          type: this.name,
+          attrs,
+          content: [{ type: 'paragraph' }],
+        })
+      },
+    }
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      Enter: ({ editor }) => {
+        if (!editor.isActive('toggleBlock')) return false
+        const { $from, empty } = editor.state.selection
+        if (!empty) return false
+        const parentParagraph = $from.parent
+        if (parentParagraph.type.name !== 'paragraph' || parentParagraph.textContent.length > 0) return false
+        const toggleDepth = $from.depth - 1
+        const toggleNode = $from.node(toggleDepth)
+        const indexInToggle = $from.index(toggleDepth)
+        if (indexInToggle < toggleNode.childCount - 1) return false
+        if (toggleNode.childCount === 1) {
+          const pos = $from.before(toggleDepth)
+          editor.chain().focus().deleteRange({ from: pos, to: pos + toggleNode.nodeSize }).insertContentAt(pos, { type: 'paragraph' }).run()
+          return true
+        }
+        const emptyParaPos = $from.before()
+        const afterToggle = $from.after(toggleDepth)
+        editor.chain().focus().deleteRange({ from: emptyParaPos, to: emptyParaPos + parentParagraph.nodeSize }).insertContentAt(afterToggle - parentParagraph.nodeSize, { type: 'paragraph' }).run()
+        return true
+      },
+      Backspace: ({ editor }) => {
+        if (!editor.isActive('toggleBlock')) return false
+        const { $from, empty } = editor.state.selection
+        if (!empty) return false
+        const toggleDepth = $from.depth - 1
+        const toggleNode = $from.node(toggleDepth)
+        if (toggleNode.childCount === 1 && toggleNode.firstChild.textContent.length === 0) {
+          const pos = $from.before(toggleDepth)
+          editor.chain().focus().deleteRange({ from: pos, to: pos + toggleNode.nodeSize }).insertContentAt(pos, { type: 'paragraph' }).run()
+          return true
+        }
+        return false
+      },
+    }
+  },
+})
+
+// ─── Node Views ──────────────────────────────────────────────────────────────
+
+function CalloutNodeView({ node, updateAttributes }) {
+  const variant = node.attrs.variant || 'info'
+  const [showPicker, setShowPicker] = useState(false)
+  const pickerRef = useRef(null)
+
+  useEffect(() => {
+    if (!showPicker) return
+    const close = (e) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) setShowPicker(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [showPicker])
+
+  const variantStyles = {
+    info:    'notion-callout-info',
+    warning: 'notion-callout-warning',
+    success: 'notion-callout-success',
+    error:   'notion-callout-error',
+  }
+
+  return (
+    <NodeViewWrapper>
+      <div className={cn('notion-callout', variantStyles[variant])}>
+        <div className="relative" contentEditable={false}>
+          <button
+            onClick={() => setShowPicker(!showPicker)}
+            className="notion-callout-icon"
+            title="Cambiar tipo"
+          >
+            {CALLOUT_VARIANTS[variant]?.icon || '💡'}
+          </button>
+          {showPicker && (
+            <div ref={pickerRef} className="notion-callout-picker">
+              {Object.entries(CALLOUT_VARIANTS).map(([key, val]) => (
+                <button
+                  key={key}
+                  onClick={() => { updateAttributes({ variant: key }); setShowPicker(false) }}
+                  className={cn('notion-callout-picker-item', variant === key && 'active')}
+                >
+                  <span>{val.icon}</span>
+                  <span>{val.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <NodeViewContent className="notion-callout-content" />
+      </div>
+    </NodeViewWrapper>
+  )
+}
+
+function ToggleNodeView({ node, updateAttributes }) {
+  const [isOpen, setIsOpen] = useState(true)
+
+  return (
+    <NodeViewWrapper>
+      <div className="notion-toggle">
+        <div className="notion-toggle-header" contentEditable={false}>
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            className="notion-toggle-arrow"
+          >
+            <ChevronRight className={cn('w-4 h-4 transition-transform duration-200', isOpen && 'rotate-90')} />
+          </button>
+          <input
+            className="notion-toggle-summary"
+            value={node.attrs.summary}
+            onChange={(e) => updateAttributes({ summary: e.target.value })}
+            placeholder="Escribe el título del toggle..."
+          />
+        </div>
+        <div className={cn('notion-toggle-content', !isOpen && 'notion-toggle-collapsed')}>
+          <NodeViewContent />
+        </div>
+      </div>
+    </NodeViewWrapper>
+  )
+}
+
 function ImageNodeView({ node, deleteNode }) {
   const { src, alt } = node.attrs
   const [preview, setPreview] = useState(false)
-  const [ctxMenu, setCtxMenu] = useState(null) // { x, y }
+  const [ctxMenu, setCtxMenu] = useState(null)
   const menuRef = useRef(null)
 
   useEffect(() => {
@@ -69,7 +371,6 @@ function ImageNodeView({ node, deleteNode }) {
       await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
       toast.success('Imagen copiada al portapapeles')
     } catch {
-      // Fallback: copy URL
       await navigator.clipboard.writeText(src)
       toast.success('URL copiada al portapapeles')
     }
@@ -115,7 +416,7 @@ function ImageNodeView({ node, deleteNode }) {
   return (
     <NodeViewWrapper>
       <div
-        className="relative group my-1"
+        className="relative group my-2"
         onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY }) }}
       >
         <img
@@ -125,8 +426,6 @@ function ImageNodeView({ node, deleteNode }) {
           className="max-w-full rounded-lg cursor-pointer block"
           draggable={false}
         />
-
-        {/* Hover toolbar */}
         <div className="absolute top-2 right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 backdrop-blur-sm rounded-lg p-1">
           {[
             { Icon: Maximize2, label: 'Vista previa', fn: () => setPreview(true) },
@@ -145,19 +444,13 @@ function ImageNodeView({ node, deleteNode }) {
         </div>
       </div>
 
-      {/* Full-screen preview */}
       {preview && createPortal(
         <div
           className="fixed inset-0 z-[300] flex items-center justify-center bg-black/85 animate-fade-in"
           onClick={() => setPreview(false)}
         >
           <div className="relative max-w-[92vw] max-h-[92vh]" onClick={e => e.stopPropagation()}>
-            <img
-              src={src}
-              alt={alt || ''}
-              className="max-w-full max-h-[92vh] rounded-xl shadow-2xl object-contain"
-            />
-            {/* Preview actions */}
+            <img src={src} alt={alt || ''} className="max-w-full max-h-[92vh] rounded-xl shadow-2xl object-contain" />
             <div className="absolute top-3 right-3 flex items-center gap-1.5">
               {[
                 { Icon: Copy, label: 'Copiar', fn: copyImage },
@@ -177,7 +470,6 @@ function ImageNodeView({ node, deleteNode }) {
         document.body
       )}
 
-      {/* Right-click context menu */}
       {ctxMenu && createPortal(
         <div
           ref={menuRef}
@@ -193,9 +485,7 @@ function ImageNodeView({ node, deleteNode }) {
                 onClick={item.action}
                 className={cn(
                   'w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-colors',
-                  item.danger
-                    ? 'text-destructive hover:bg-destructive/10'
-                    : 'text-foreground hover:bg-accent'
+                  item.danger ? 'text-destructive hover:bg-destructive/10' : 'text-foreground hover:bg-accent'
                 )}
               >
                 <item.icon className="w-4 h-4 shrink-0" />
@@ -210,7 +500,7 @@ function ImageNodeView({ node, deleteNode }) {
   )
 }
 
-function CodeBlockComponent({ node, updateAttributes, extension }) {
+function CodeBlockComponent({ node, updateAttributes }) {
   const [showLangs, setShowLangs] = useState(false)
   const [filter, setFilter] = useState('')
   const [copied, setCopied] = useState(false)
@@ -250,20 +540,12 @@ function CodeBlockComponent({ node, updateAttributes, extension }) {
   return (
     <NodeViewWrapper className="code-block-wrapper">
       <div className="code-block-header">
-        <button
-          ref={btnRef}
-          onClick={openDropdown}
-          className="code-lang-btn"
-        >
+        <button ref={btnRef} onClick={openDropdown} className="code-lang-btn">
           {currentLang.label}
           <ChevronDown className="w-3 h-3" />
         </button>
         {showLangs && createPortal(
-          <div
-            ref={dropRef}
-            className="code-lang-dropdown"
-            style={{ top: dropPos.top, left: dropPos.left }}
-          >
+          <div ref={dropRef} className="code-lang-dropdown" style={{ top: dropPos.top, left: dropPos.left }}>
             <input
               autoFocus
               value={filter}
@@ -275,14 +557,8 @@ function CodeBlockComponent({ node, updateAttributes, extension }) {
               {filtered.map(lang => (
                 <button
                   key={lang.label}
-                  onClick={() => {
-                    updateAttributes({ language: lang.value })
-                    setShowLangs(false)
-                  }}
-                  className={cn(
-                    'code-lang-option',
-                    node.attrs.language === lang.value && 'active'
-                  )}
+                  onClick={() => { updateAttributes({ language: lang.value }); setShowLangs(false) }}
+                  className={cn('code-lang-option', node.attrs.language === lang.value && 'active')}
                 >
                   {lang.label}
                 </button>
@@ -304,22 +580,241 @@ function CodeBlockComponent({ node, updateAttributes, extension }) {
   )
 }
 
+// ─── Bubble Menu ─────────────────────────────────────────────────────────────
+
+function EditorBubbleMenu({ editor }) {
+  const [showColors, setShowColors] = useState(false)
+  const [showHighlight, setShowHighlight] = useState(false)
+  const [showLinkInput, setShowLinkInput] = useState(false)
+  const [linkUrl, setLinkUrl] = useState('')
+  const linkInputRef = useRef(null)
+  const colorsRef = useRef(null)
+  const highlightRef = useRef(null)
+
+  useEffect(() => {
+    if (showLinkInput && linkInputRef.current) linkInputRef.current.focus()
+  }, [showLinkInput])
+
+  useEffect(() => {
+    const close = (e) => {
+      // Don't close if clicking inside the portal color picker or on the trigger button
+      if (e.target.closest('.notion-color-swatch') || e.target.closest('.notion-color-picker-portal')) return
+      if (colorsRef.current && colorsRef.current.contains(e.target)) return
+      if (highlightRef.current && highlightRef.current.contains(e.target)) return
+      setShowColors(false)
+      setShowHighlight(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [])
+
+  const handleLinkClick = () => {
+    if (editor.isActive('link')) {
+      editor.chain().focus().unsetLink().run()
+      return
+    }
+    setShowLinkInput(true)
+    setLinkUrl('')
+  }
+
+  const applyLink = () => {
+    if (linkUrl.trim()) {
+      const url = linkUrl.startsWith('http') ? linkUrl : `https://${linkUrl}`
+      editor.chain().focus().setLink({ href: url }).run()
+    }
+    setShowLinkInput(false)
+    setLinkUrl('')
+  }
+
+  const BBtn = ({ active, onClick, title, children }) => (
+    <button
+      onMouseDown={(e) => { e.preventDefault(); onClick() }}
+      title={title}
+      className={cn(
+        'p-1.5 rounded-md transition-colors',
+        active
+          ? 'bg-accent text-foreground'
+          : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+      )}
+    >
+      {children}
+    </button>
+  )
+
+  return (
+    <BubbleMenu
+      editor={editor}
+      tippyOptions={{
+        duration: 150,
+        placement: 'top',
+        animation: 'shift-toward-subtle',
+        interactive: true,
+        appendTo: () => document.body,
+      }}
+      shouldShow={({ editor: e, state }) => {
+        if (e.isActive('codeBlock') || e.isActive('image')) return false
+        const { from, to } = state.selection
+        return from !== to
+      }}
+    >
+      <div className="notion-bubble-menu">
+        <div className="flex items-center gap-0.5">
+          <BBtn active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} title="Negrita (⌘B)">
+            <Bold className="w-3.5 h-3.5" />
+          </BBtn>
+          <BBtn active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} title="Cursiva (⌘I)">
+            <Italic className="w-3.5 h-3.5" />
+          </BBtn>
+          <BBtn active={editor.isActive('underline')} onClick={() => editor.chain().focus().toggleUnderline().run()} title="Subrayado (⌘U)">
+            <UnderlineIcon className="w-3.5 h-3.5" />
+          </BBtn>
+          <BBtn active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()} title="Tachado">
+            <Strikethrough className="w-3.5 h-3.5" />
+          </BBtn>
+          <BBtn active={editor.isActive('code')} onClick={() => editor.chain().focus().toggleCode().run()} title="Código (⌘E)">
+            <Code2 className="w-3.5 h-3.5" />
+          </BBtn>
+
+          <div className="w-px h-5 bg-border mx-0.5" />
+
+          <BBtn active={editor.isActive('link')} onClick={handleLinkClick} title={editor.isActive('link') ? 'Quitar enlace' : 'Enlace'}>
+            {editor.isActive('link') ? <Unlink className="w-3.5 h-3.5" /> : <LinkIcon className="w-3.5 h-3.5" />}
+          </BBtn>
+
+          <div className="w-px h-5 bg-border mx-0.5" />
+
+          {/* Text color */}
+          <div className="relative" ref={colorsRef}>
+            <BBtn active={showColors} onClick={() => { setShowColors(!showColors); setShowHighlight(false) }} title="Color de texto">
+              <Palette className="w-3.5 h-3.5" />
+            </BBtn>
+            {showColors && createPortal(
+              <div
+                className="notion-color-picker-portal fixed z-[9999] rounded-xl border border-border bg-popover shadow-xl min-w-[170px] animate-scale-in"
+                style={{
+                  top: colorsRef.current?.getBoundingClientRect().bottom + 6,
+                  left: colorsRef.current?.getBoundingClientRect().left - 50,
+                }}
+                onMouseDown={e => e.preventDefault()}
+              >
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 pt-2 pb-1">Color de texto</div>
+                <div className="grid grid-cols-5 gap-1 p-2">
+                  {TEXT_COLORS.map(c => (
+                    <button
+                      key={c.name}
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        if (c.color) editor.chain().focus().setColor(c.color).run()
+                        else editor.chain().focus().unsetColor().run()
+                        setShowColors(false)
+                      }}
+                      className="notion-color-swatch"
+                      title={c.name}
+                    >
+                      <span style={{ color: c.color || 'var(--color-foreground)' }} className="text-sm font-bold">A</span>
+                    </button>
+                  ))}
+                </div>
+              </div>,
+              document.body
+            )}
+          </div>
+
+          {/* Highlight color */}
+          <div className="relative" ref={highlightRef}>
+            <BBtn active={showHighlight} onClick={() => { setShowHighlight(!showHighlight); setShowColors(false) }} title="Resaltado">
+              <Highlighter className="w-3.5 h-3.5" />
+            </BBtn>
+            {showHighlight && createPortal(
+              <div
+                className="notion-color-picker-portal fixed z-[9999] rounded-xl border border-border bg-popover shadow-xl min-w-[170px] animate-scale-in"
+                style={{
+                  top: highlightRef.current?.getBoundingClientRect().bottom + 6,
+                  left: highlightRef.current?.getBoundingClientRect().left - 50,
+                }}
+                onMouseDown={e => e.preventDefault()}
+              >
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 pt-2 pb-1">Resaltado</div>
+                <div className="grid grid-cols-5 gap-1 p-2">
+                  {HIGHLIGHT_COLORS.map(c => (
+                    <button
+                      key={c.name}
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        if (c.color) editor.chain().focus().toggleHighlight({ color: c.color }).run()
+                        else editor.chain().focus().unsetHighlight().run()
+                        setShowHighlight(false)
+                      }}
+                      className="notion-color-swatch"
+                      title={c.name}
+                    >
+                      <span
+                        className="w-5 h-5 rounded-sm border border-border/50"
+                        style={{ background: c.color || 'transparent' }}
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>,
+              document.body
+            )}
+          </div>
+        </div>
+
+        {/* Link input */}
+        {showLinkInput && (
+          <div className="notion-link-input" onMouseDown={e => e.stopPropagation()}>
+            <input
+              ref={linkInputRef}
+              value={linkUrl}
+              onChange={e => setLinkUrl(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); applyLink() }
+                if (e.key === 'Escape') { setShowLinkInput(false); setLinkUrl('') }
+              }}
+              placeholder="Pegar enlace y presionar Enter..."
+              className="notion-link-input-field"
+            />
+          </div>
+        )}
+      </div>
+    </BubbleMenu>
+  )
+}
+
+// ─── Slash Command Items ─────────────────────────────────────────────────────
+
 const SLASH_ITEMS = [
-  { label: 'Texto', icon: Type, group: 'Bloques básicos', action: (editor) => editor.chain().focus().setParagraph().run() },
-  { label: 'Encabezado 1', icon: Heading1, group: 'Bloques básicos', shortcut: '#', action: (editor) => editor.chain().focus().toggleHeading({ level: 1 }).run() },
-  { label: 'Encabezado 2', icon: Heading2, group: 'Bloques básicos', shortcut: '##', action: (editor) => editor.chain().focus().toggleHeading({ level: 2 }).run() },
-  { label: 'Encabezado 3', icon: Heading3, group: 'Bloques básicos', shortcut: '###', action: (editor) => editor.chain().focus().toggleHeading({ level: 3 }).run() },
-  { label: 'Lista con viñetas', icon: List, group: 'Bloques básicos', shortcut: '-', action: (editor) => editor.chain().focus().toggleBulletList().run() },
-  { label: 'Lista numerada', icon: ListOrdered, group: 'Bloques básicos', shortcut: '1.', action: (editor) => editor.chain().focus().toggleOrderedList().run() },
-  { label: 'Lista de tareas', icon: CheckSquare, group: 'Bloques básicos', shortcut: '[]', action: (editor) => editor.chain().focus().toggleTaskList().run() },
-  { label: 'Cita', icon: Quote, group: 'Bloques básicos', shortcut: '>', action: (editor) => editor.chain().focus().toggleBlockquote().run() },
-  { label: 'Código', icon: Code, group: 'Bloques básicos', shortcut: '```', action: (editor) => editor.chain().focus().toggleCodeBlock().run() },
-  { label: 'Divisor', icon: Minus, group: 'Bloques básicos', shortcut: '---', action: (editor) => editor.chain().focus().setHorizontalRule().run() },
-  { label: 'Imagen', icon: ImageIcon, group: 'Contenido multimedia', isFile: true, accept: 'image/*', mediaType: 'image' },
-  { label: 'Video', icon: Video, group: 'Contenido multimedia', isFile: true, accept: 'video/*', mediaType: 'video' },
-  { label: 'Audio', icon: Volume2, group: 'Contenido multimedia', isFile: true, accept: 'audio/*', mediaType: 'audio' },
-  { label: 'Archivo', icon: FileText, group: 'Contenido multimedia', isFile: true, accept: '*', mediaType: 'file' },
+  // Basic blocks
+  { label: 'Texto', keywords: 'text paragraph parrafo', icon: Type, group: 'Bloques básicos', action: (e) => e.chain().focus().setParagraph().run() },
+  { label: 'Encabezado 1', keywords: 'heading h1 titulo title', icon: Heading1, group: 'Bloques básicos', shortcut: '#', action: (e) => e.chain().focus().toggleHeading({ level: 1 }).run() },
+  { label: 'Encabezado 2', keywords: 'heading h2 titulo title', icon: Heading2, group: 'Bloques básicos', shortcut: '##', action: (e) => e.chain().focus().toggleHeading({ level: 2 }).run() },
+  { label: 'Encabezado 3', keywords: 'heading h3 titulo title', icon: Heading3, group: 'Bloques básicos', shortcut: '###', action: (e) => e.chain().focus().toggleHeading({ level: 3 }).run() },
+  { label: 'Lista con viñetas', keywords: 'bullet list unordered vinetas', icon: List, group: 'Bloques básicos', shortcut: '-', action: (e) => e.chain().focus().toggleBulletList().run() },
+  { label: 'Lista numerada', keywords: 'ordered number list numeros', icon: ListOrdered, group: 'Bloques básicos', shortcut: '1.', action: (e) => e.chain().focus().toggleOrderedList().run() },
+  { label: 'Lista de tareas', keywords: 'todo task check checklist', icon: CheckSquare, group: 'Bloques básicos', shortcut: '[]', action: (e) => e.chain().focus().toggleTaskList().run() },
+  { label: 'Cita', keywords: 'quote blockquote citacion', icon: Quote, group: 'Bloques básicos', shortcut: '>', action: (e) => e.chain().focus().toggleBlockquote().run() },
+  { label: 'Código', keywords: 'code codigo codeblock programacion', icon: Code, group: 'Bloques básicos', shortcut: '```', action: (e) => e.chain().focus().toggleCodeBlock().run() },
+  { label: 'Divisor', keywords: 'divider separator separador linea hr', icon: Minus, group: 'Bloques básicos', shortcut: '---', action: (e) => e.chain().focus().setHorizontalRule().run() },
+  // Advanced blocks
+  { label: 'Aviso informativo', keywords: 'aviso info nota tip consejo callout', icon: Info, group: 'Bloques avanzados', action: (e) => e.chain().focus().setCallout({ variant: 'info' }).run() },
+  { label: 'Aviso de advertencia', keywords: 'advertencia warning alerta atencion cuidado', icon: AlertTriangle, group: 'Bloques avanzados', action: (e) => e.chain().focus().setCallout({ variant: 'warning' }).run() },
+  { label: 'Aviso de éxito', keywords: 'exito success completado listo ok bien', icon: CheckCircle2, group: 'Bloques avanzados', action: (e) => e.chain().focus().setCallout({ variant: 'success' }).run() },
+  { label: 'Aviso de error', keywords: 'error fallo problema peligro danger', icon: XCircle, group: 'Bloques avanzados', action: (e) => e.chain().focus().setCallout({ variant: 'error' }).run() },
+  { label: 'Desplegable', keywords: 'toggle dropdown expandir colapsar', icon: ToggleRight, group: 'Bloques avanzados', action: (e) => e.chain().focus().setToggle({ summary: '' }).run() },
+  { label: 'Tabla', keywords: 'table grid grilla filas columnas', icon: TableIcon, group: 'Bloques avanzados', action: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+  // Multimedia
+  { label: 'Imagen', keywords: 'image photo foto picture', icon: ImageIcon, group: 'Contenido multimedia', isFile: true, accept: 'image/*', mediaType: 'image' },
+  { label: 'Video', keywords: 'video clip pelicula', icon: Video, group: 'Contenido multimedia', isFile: true, accept: 'video/*', mediaType: 'video' },
+  { label: 'Audio', keywords: 'audio sonido musica sound', icon: Volume2, group: 'Contenido multimedia', isFile: true, accept: 'audio/*', mediaType: 'audio' },
+  { label: 'Archivo', keywords: 'file documento adjunto attachment', icon: FileText, group: 'Contenido multimedia', isFile: true, accept: '*', mediaType: 'file' },
 ]
+
+function normalize(str) {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
+// ─── Block Editor ────────────────────────────────────────────────────────────
 
 export default function BlockEditor({ value, onChange, placeholder }) {
   const [slashMenu, setSlashMenu] = useState(null)
@@ -330,17 +825,14 @@ export default function BlockEditor({ value, onChange, placeholder }) {
   const fileInputRef = useRef(null)
   const pendingAction = useRef(null)
 
-  // Parse initial content
   const getInitialContent = () => {
     if (!value) return ''
     try {
-      // If it's our old JSON block format, convert to HTML
       const parsed = JSON.parse(value)
       if (Array.isArray(parsed) && parsed[0]?.type) {
         return blocksToHtml(parsed)
       }
     } catch {}
-    // If it's already HTML or plain text
     if (value.startsWith('<') || value.startsWith('[')) return value
     return `<p>${value}</p>`
   }
@@ -352,9 +844,7 @@ export default function BlockEditor({ value, onChange, placeholder }) {
         codeBlock: false,
       }),
       CodeBlockLowlight.extend({
-        addNodeView() {
-          return ReactNodeViewRenderer(CodeBlockComponent)
-        },
+        addNodeView() { return ReactNodeViewRenderer(CodeBlockComponent) },
       }).configure({ lowlight }),
       Placeholder.configure({
         placeholder: placeholder || "Escribe '/' para ver comandos...",
@@ -363,18 +853,32 @@ export default function BlockEditor({ value, onChange, placeholder }) {
       TaskList,
       TaskItem.configure({ nested: true }),
       ImageExt.extend({
-        addNodeView() {
-          return ReactNodeViewRenderer(ImageNodeView)
-        },
+        addNodeView() { return ReactNodeViewRenderer(ImageNodeView) },
       }).configure({ inline: false }),
+      // New extensions
+      TiptapUnderline,
+      TiptapHighlight.configure({ multicolor: true }),
+      TiptapLink.configure({
+        openOnClick: false,
+        HTMLAttributes: { class: 'notion-link' },
+      }),
+      TextStyle,
+      TiptapColor,
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableCell,
+      TableHeader,
+      // Custom blocks
+      Callout,
+      ToggleBlock,
     ],
     content: getInitialContent(),
     editorProps: {
       attributes: {
-        class: 'outline-none min-h-[60px] prose-sm',
+        class: 'outline-none min-h-[60px] notion-editor-content',
       },
       handleKeyDown: (view, event) => {
-        // Slash command trigger
         if (event.key === '/' && !slashMenu) {
           setTimeout(() => {
             const { from } = view.state.selection
@@ -385,7 +889,6 @@ export default function BlockEditor({ value, onChange, placeholder }) {
           }, 10)
         }
 
-        // Slash menu keyboard nav
         if (slashMenu) {
           if (event.key === 'ArrowDown') {
             event.preventDefault()
@@ -407,7 +910,6 @@ export default function BlockEditor({ value, onChange, placeholder }) {
             setSlashFilter('')
             return true
           }
-          // Filter as user types
           if (event.key.length === 1 && !event.metaKey && !event.ctrlKey) {
             setSlashFilter(prev => prev + event.key)
             setSelectedIndex(0)
@@ -424,12 +926,11 @@ export default function BlockEditor({ value, onChange, placeholder }) {
         return false
       },
     },
-    onUpdate: ({ editor }) => {
-      onChange?.(editor.getHTML())
+    onUpdate: ({ editor: e }) => {
+      onChange?.(e.getHTML())
     },
   })
 
-  // Close slash menu on click outside
   useEffect(() => {
     const close = (e) => {
       if (slashMenuRef.current && !slashMenuRef.current.contains(e.target)) {
@@ -441,14 +942,14 @@ export default function BlockEditor({ value, onChange, placeholder }) {
     return () => document.removeEventListener('mousedown', close)
   }, [])
 
-  const filteredItems = SLASH_ITEMS.filter(item =>
-    item.label.toLowerCase().includes(slashFilter.toLowerCase())
-  )
+  const filteredItems = SLASH_ITEMS.filter(item => {
+    const q = normalize(slashFilter)
+    return normalize(item.label).includes(q) || (item.keywords && normalize(item.keywords).includes(q))
+  })
 
   const selectSlashItem = useCallback((item) => {
     if (!item || !editor) return
 
-    // Remove the "/" character
     const { from } = editor.state.selection
     const textBefore = editor.state.doc.textBetween(Math.max(0, from - slashFilter.length - 1), from)
     const slashPos = textBefore.lastIndexOf('/')
@@ -487,9 +988,7 @@ export default function BlockEditor({ value, onChange, placeholder }) {
       const { data } = supabase.storage.from('attachments').getPublicUrl(path)
       const url = data?.publicUrl
       if (url) {
-        // Re-focus editor first
         editor.commands.focus('end')
-
         let html = ''
         if (mediaType === 'image') {
           html = `<img src="${url}" alt="${file.name}" /><p></p>`
@@ -501,9 +1000,8 @@ export default function BlockEditor({ value, onChange, placeholder }) {
           const size = file.size < 1024 * 1024
             ? (file.size / 1024).toFixed(1) + ' KB'
             : (file.size / (1024 * 1024)).toFixed(1) + ' MB'
-          html = `<p><a href="${url}" target="_blank" rel="noopener">📎 ${file.name} (${size})</a></p><p></p>`
+          html = `<p><a href="${url}" target="_blank" rel="noopener noreferrer">📎 ${file.name} (${size})</a></p><p></p>`
         }
-
         editor.chain().insertContent(html).focus('end').run()
       }
     }
@@ -511,7 +1009,6 @@ export default function BlockEditor({ value, onChange, placeholder }) {
     pendingAction.current = null
   }
 
-  // Group items
   const groups = {}
   filteredItems.forEach(item => {
     if (!groups[item.group]) groups[item.group] = []
@@ -530,16 +1027,19 @@ export default function BlockEditor({ value, onChange, placeholder }) {
         </div>
       )}
 
+      {/* Bubble menu */}
+      {editor && <EditorBubbleMenu editor={editor} />}
+
       <EditorContent editor={editor} />
 
       {/* Slash command menu */}
       {slashMenu && filteredItems.length > 0 && (
         <div
           ref={slashMenuRef}
-          className="fixed z-[200] w-64 max-h-80 overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-popover shadow-xl py-1 animate-scale-in"
+          className="fixed z-[200] w-72 max-h-[400px] overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-popover shadow-xl py-1 animate-scale-in"
           style={{
-            left: Math.min(slashMenu.x, window.innerWidth - 270),
-            top: Math.min(slashMenu.y, window.innerHeight - 300),
+            left: Math.min(slashMenu.x, window.innerWidth - 290),
+            top: Math.min(slashMenu.y, window.innerHeight - 400),
           }}
         >
           {Object.entries(groups).map(([group, items]) => (
@@ -557,19 +1057,23 @@ export default function BlockEditor({ value, onChange, placeholder }) {
                     onMouseDown={(e) => { e.preventDefault(); selectSlashItem(item) }}
                     onMouseEnter={() => setSelectedIndex(idx)}
                     className={cn(
-                      'w-full flex items-center gap-3 px-3 py-1.5 text-sm transition-colors',
+                      'w-full flex items-center gap-3 px-3 py-2 text-sm transition-colors',
                       selectedIndex === idx ? 'bg-accent' : 'hover:bg-accent/50'
                     )}
                   >
-                    <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <span className="flex-1 text-left text-foreground">{item.label}</span>
-                    {item.shortcut && <span className="text-[10px] text-muted-foreground font-mono">{item.shortcut}</span>}
+                    <div className="w-8 h-8 rounded-lg bg-muted border border-border/50 flex items-center justify-center shrink-0">
+                      <Icon className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <div className="text-foreground font-medium">{item.label}</div>
+                      {item.shortcut && <div className="text-[10px] text-muted-foreground font-mono">{item.shortcut}</div>}
+                    </div>
                   </button>
                 )
               })}
             </div>
           ))}
-          <div className="px-3 py-1.5 border-t border-border flex items-center gap-3 text-[10px] text-muted-foreground">
+          <div className="px-3 py-2 border-t border-border flex items-center gap-3 text-[10px] text-muted-foreground">
             <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-muted border border-border font-medium">↑↓</kbd> Navegar</span>
             <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-muted border border-border font-medium">↵</kbd> Seleccionar</span>
             <span className="flex items-center gap-1"><kbd className="px-1 py-0.5 rounded bg-muted border border-border font-medium">esc</kbd> Cerrar</span>
@@ -580,7 +1084,8 @@ export default function BlockEditor({ value, onChange, placeholder }) {
   )
 }
 
-// Convert old block format to HTML
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 function blocksToHtml(blocks) {
   return blocks.map(b => {
     switch (b.type) {

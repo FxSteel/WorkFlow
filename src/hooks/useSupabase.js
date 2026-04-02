@@ -387,19 +387,21 @@ export function useSupabase() {
     return { error }
   }, [dispatch])
 
-  const acceptInvite = useCallback(async (inviteId, orgId, userId, userName, userEmail, inviteRole, workspaceIds) => {
-    // Add user as org_member with role and workspace access from invite
+  const acceptInvite = useCallback(async (inviteId, orgId, userId, userName, userEmail, inviteRole, workspaceIds, customPermissions) => {
+    // Add user as org_member with role, workspace access and custom permissions from invite
+    const memberData = {
+      org_id: orgId,
+      user_id: userId,
+      name: userName,
+      email: userEmail,
+      role: inviteRole || 'member',
+      workspace_ids: workspaceIds || [],
+      color: ['#6c5ce7', '#00b894', '#0984e3', '#e17055', '#fdcb6e'][Math.floor(Math.random() * 5)],
+    }
+    if (customPermissions) memberData.custom_permissions = customPermissions
     const { error: memberError } = await supabase
       .from('org_members')
-      .insert({
-        org_id: orgId,
-        user_id: userId,
-        name: userName,
-        email: userEmail,
-        role: inviteRole || 'member',
-        workspace_ids: workspaceIds || [],
-        color: ['#6c5ce7', '#00b894', '#0984e3', '#e17055', '#fdcb6e'][Math.floor(Math.random() * 5)],
-      })
+      .insert(memberData)
     if (memberError) return { error: memberError }
 
     // Update invite status
@@ -796,23 +798,67 @@ export function useSupabase() {
 
   // --- User Notes ---
 
-  const fetchUserNotes = useCallback(async (userId, orgId) => {
+  const fetchWorkspaceNotes = useCallback(async (userId, orgId, workspaceId = null) => {
+    let query = supabase
+      .from('user_notes')
+      .select('id, title, updated_at')
+      .eq('user_id', userId)
+      .eq('org_id', orgId)
+    if (workspaceId) {
+      query = query.eq('workspace_id', workspaceId)
+    } else {
+      query = query.is('workspace_id', null)
+    }
+    const { data } = await query.order('updated_at', { ascending: true })
+    return data || []
+  }, [])
+
+  const fetchNote = useCallback(async (noteId) => {
     const { data } = await supabase
       .from('user_notes')
       .select('*')
-      .eq('user_id', userId)
-      .eq('org_id', orgId)
+      .eq('id', noteId)
       .single()
     return data
   }, [])
 
-  const saveUserNotes = useCallback(async (userId, orgId, content) => {
+  const createNote = useCallback(async (userId, orgId, workspaceId = null, title = 'Sin título') => {
+    const row = { user_id: userId, org_id: orgId, title, content: '' }
+    if (workspaceId) row.workspace_id = workspaceId
+    const { data, error } = await supabase
+      .from('user_notes')
+      .insert(row)
+      .select()
+      .single()
+    if (error) console.error('createNote error:', error)
+    return data
+  }, [])
+
+  const saveNote = useCallback(async (noteId, content) => {
     const { data } = await supabase
       .from('user_notes')
-      .upsert({ user_id: userId, org_id: orgId, content, updated_at: new Date().toISOString() }, { onConflict: 'user_id,org_id' })
+      .update({ content, updated_at: new Date().toISOString() })
+      .eq('id', noteId)
       .select()
       .single()
     return data
+  }, [])
+
+  const updateNote = useCallback(async (noteId, updates) => {
+    const { data } = await supabase
+      .from('user_notes')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', noteId)
+      .select()
+      .single()
+    return data
+  }, [])
+
+  const deleteNote = useCallback(async (noteId) => {
+    await supabase
+      .from('user_notes')
+      .delete()
+      .eq('id', noteId)
   }, [])
 
   return {
@@ -866,7 +912,11 @@ export function useSupabase() {
     updateSubtask,
     deleteSubtask,
     ensurePrivateWorkspace,
-    fetchUserNotes,
-    saveUserNotes,
+    fetchWorkspaceNotes,
+    fetchNote,
+    createNote,
+    saveNote,
+    updateNote,
+    deleteNote,
   }
 }

@@ -7,10 +7,13 @@ import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
 import { useNotifications } from '../../hooks/useNotifications'
 import { toast } from 'sonner'
+import { usePermissions } from '../../hooks/usePermissions'
 
 export default function TaskComments({ taskId }) {
   const { user } = useAuth()
   const { state } = useApp()
+  const { can } = usePermissions()
+  const canComment = can('comment')
   const { notifyMention, notifyComment } = useNotifications()
   const [comments, setComments] = useState([])
   const [loading, setLoading] = useState(true)
@@ -143,6 +146,7 @@ export default function TaskComments({ taskId }) {
   }
 
   const handleSend = async () => {
+    if (!canComment) return
     if (!text.trim() && attachments.length === 0) return
     if (!taskId) return
 

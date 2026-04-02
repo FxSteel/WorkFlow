@@ -13,10 +13,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { cn } from '../../lib/utils'
 import { STATUS_OPTIONS, STATUS_COLORS, PRIORITY_OPTIONS } from '../../lib/constants'
 import { toast } from 'sonner'
+import { usePermissions } from '../../hooks/usePermissions'
 
 export default function TaskFullPage() {
   const { state, closeTaskModal, closeSidePanel } = useApp()
   const { user } = useAuth()
+  const { can } = usePermissions()
+  const canEdit = can('editTask')
+  const canDelete = can('deleteTask')
+  const canCreate = can('createTask')
   const { updateTask, createTask, deleteTask } = useSupabase()
 
   // Determine which task to edit (from modal or side panel)
@@ -69,7 +74,7 @@ export default function TaskFullPage() {
   // Auto-save on field change for existing tasks
   const handleFieldSave = async (field, value) => {
     handleChange(field, value)
-    if (!isNew && sourceTask?.id) {
+    if (!isNew && sourceTask?.id && canEdit) {
       await updateTask(sourceTask.id, { [field]: value || null })
       setSaved(true)
       setTimeout(() => setSaved(false), 1500)
@@ -77,7 +82,7 @@ export default function TaskFullPage() {
   }
 
   const handleTitleBlur = async () => {
-    if (!isNew && sourceTask?.id && form.title.trim()) {
+    if (!isNew && sourceTask?.id && canEdit && form.title.trim()) {
       await updateTask(sourceTask.id, { title: form.title.trim() })
       setSaved(true)
       setTimeout(() => setSaved(false), 1500)
@@ -85,7 +90,7 @@ export default function TaskFullPage() {
   }
 
   const handleDescBlur = async () => {
-    if (!isNew && sourceTask?.id) {
+    if (!isNew && sourceTask?.id && canEdit) {
       await updateTask(sourceTask.id, { description: form.description })
       setSaved(true)
       setTimeout(() => setSaved(false), 1500)
@@ -93,7 +98,7 @@ export default function TaskFullPage() {
   }
 
   const handleCreate = async () => {
-    if (!form.title.trim()) return
+    if (!form.title.trim() || !canCreate) return
     await createTask({
       ...form,
       assignee_id: form.assignee_id || null,
@@ -107,7 +112,7 @@ export default function TaskFullPage() {
   }
 
   const handleDelete = async () => {
-    if (sourceTask?.id) {
+    if (sourceTask?.id && canDelete) {
       await deleteTask(sourceTask.id)
     }
     toast.success('Tarea eliminada')
@@ -140,7 +145,7 @@ export default function TaskFullPage() {
               Guardado
             </span>
           )}
-          {!isNew && (
+          {!isNew && canDelete && (
             <button
               onClick={handleDelete}
               className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
@@ -148,7 +153,7 @@ export default function TaskFullPage() {
               <Trash2 className="w-4 h-4" />
             </button>
           )}
-          {isNew && (
+          {isNew && canCreate && (
             <button
               onClick={handleCreate}
               disabled={!form.title.trim()}

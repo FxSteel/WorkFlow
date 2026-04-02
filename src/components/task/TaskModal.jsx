@@ -3,6 +3,7 @@ import { X, Calendar, User, Flag, Tag, AlignLeft, Layers, Paperclip, ChevronDown
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
+import BlockEditor from '../ui/BlockEditor'
 import DatePicker from '../ui/DatePicker'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select'
 import { cn } from '../../lib/utils'
@@ -240,13 +241,13 @@ export default function TaskModal() {
               <AlignLeft className="w-3.5 h-3.5" />
               Descripción
             </label>
-            <textarea
-              value={form.description}
-              onChange={(e) => handleChange('description', e.target.value)}
-              placeholder="Describe la tarea en detalle..."
-              rows={5}
-              className="w-full px-3 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground resize-none"
-            />
+            <div className="rounded-lg border border-input bg-background px-3 py-2 min-h-[120px]">
+              <BlockEditor
+                value={form.description}
+                onChange={(val) => handleChange('description', val)}
+                placeholder="Describe la tarea en detalle..."
+              />
+            </div>
           </div>
         </div>
 
