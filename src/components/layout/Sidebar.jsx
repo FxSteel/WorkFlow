@@ -109,7 +109,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
     if (state.currentOrg && user) {
       ensurePrivateWorkspace(state.currentOrg.id, user.id).then(ws => {
         setPrivateWs(ws)
-        if (ws?.id) fetchNotesForWorkspace(ws.id)
+        if (ws?.id) fetchNotesForWorkspace(ws.id, true)
       })
     }
   }, [state.currentOrg?.id, user?.id])
@@ -139,6 +139,12 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
       setWorkspacesLoaded(true)
     }
   }, [state.currentOrg?.id, state.workspaces, state.loading])
+
+  // Fetch notes for all visible workspaces when they load
+  useEffect(() => {
+    if (!user || !state.currentOrg || visibleWorkspaces.length === 0) return
+    visibleWorkspaces.forEach(ws => fetchNotesForWorkspace(ws.id))
+  }, [user?.id, state.currentOrg?.id, visibleWorkspaces.length])
 
   // Close context menu & add menu
   useEffect(() => {
@@ -353,9 +359,9 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
     setEditName('')
   }
 
-  const fetchNotesForWorkspace = async (wsId) => {
+  const fetchNotesForWorkspace = async (wsId, isPrivate = false) => {
     if (!user || !state.currentOrg) return
-    const notes = await fetchWorkspaceNotes(user.id, state.currentOrg.id, wsId)
+    const notes = await fetchWorkspaceNotes(user.id, state.currentOrg.id, wsId, isPrivate)
     setWorkspaceNotes(prev => ({ ...prev, [wsId]: notes }))
   }
 

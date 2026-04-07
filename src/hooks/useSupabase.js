@@ -798,12 +798,15 @@ export function useSupabase() {
 
   // --- User Notes ---
 
-  const fetchWorkspaceNotes = useCallback(async (userId, orgId, workspaceId = null) => {
+  const fetchWorkspaceNotes = useCallback(async (userId, orgId, workspaceId = null, isPrivate = false) => {
     let query = supabase
       .from('user_notes')
-      .select('id, title, updated_at')
-      .eq('user_id', userId)
+      .select('id, title, updated_at, user_id')
       .eq('org_id', orgId)
+    if (isPrivate) {
+      // Private workspace: only show own notes
+      query = query.eq('user_id', userId)
+    }
     if (workspaceId) {
       query = query.eq('workspace_id', workspaceId)
     } else {
