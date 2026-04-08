@@ -124,9 +124,17 @@
 }
 
 /* ═══ Notion-style Editor ═══════════════════════════════════════════════════ */
+.block-editor {
+  position: relative;
+}
 .block-editor .tiptap {
   outline: none;
   min-height: 60px;
+}
+/* Keep selection visible when editor loses focus (e.g. link popover) */
+.block-editor .tiptap ::selection {
+  background: #3b82f680 !important;
+  color: white !important;
 }
 .block-editor .tiptap > * + * {
   margin-top: 0.35em;
@@ -575,6 +583,10 @@
 .notion-callout-picker-item.active {
   background: var(--color-accent);
 }
+.notion-callout-picker-up {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
 
 /* ─── Notion Toggle ───────────────────────────────────────────────────────── */
 .notion-toggle {
@@ -662,6 +674,14 @@
 .block-editor .tiptap table td p,
 .block-editor .tiptap table th p {
   margin: 0;
+}
+.block-editor .tiptap table td[style*="background-color"],
+.block-editor .tiptap table th[style*="background-color"] {
+  color: #1e293b;
+}
+.block-editor .tiptap table td[style*="background-color"] p,
+.block-editor .tiptap table th[style*="background-color"] p {
+  color: #1e293b;
 }
 .block-editor .tiptap table .selectedCell::after {
   content: '';

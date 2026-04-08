@@ -18,19 +18,22 @@ import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
-import { Node, mergeAttributes } from '@tiptap/core'
+import { Node, Extension, mergeAttributes } from '@tiptap/core'
 import { common, createLowlight } from 'lowlight'
 import {
   Type, Heading1, Heading2, Heading3, List, ListOrdered,
-  CheckSquare, Quote, Minus, Code, ChevronDown, ChevronRight, Copy, Check,
+  CheckSquare, Quote, Minus, Plus, Code, ChevronDown, ChevronRight, Copy, Check,
   Image as ImageIcon, Video, Volume2, FileText, Loader2,
   X, Maximize2, Download, ExternalLink, Trash2,
   Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code2,
   Link as LinkIcon, Unlink,
-  AlignLeft, AlignCenter, AlignRight,
+  AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Palette, Highlighter,
+  IndentIncrease, IndentDecrease, RemoveFormatting,
   Table as TableIcon, Info, AlertTriangle, CheckCircle2, XCircle,
   ToggleRight,
+  Rows, Columns, ArrowUpFromLine, ArrowDownFromLine, ArrowLeftFromLine, ArrowRightFromLine,
+  Paintbrush, Settings,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
@@ -270,10 +273,18 @@ const ToggleBlock = Node.create({
 function CalloutNodeView({ node, updateAttributes }) {
   const variant = node.attrs.variant || 'info'
   const [showPicker, setShowPicker] = useState(false)
+  const [openUp, setOpenUp] = useState(false)
   const pickerRef = useRef(null)
+  const btnRef = useRef(null)
 
   useEffect(() => {
     if (!showPicker) return
+    // Check if there's space below
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      setOpenUp(spaceBelow < 180)
+    }
     const close = (e) => {
       if (pickerRef.current && !pickerRef.current.contains(e.target)) setShowPicker(false)
     }
@@ -293,6 +304,7 @@ function CalloutNodeView({ node, updateAttributes }) {
       <div className={cn('notion-callout', variantStyles[variant])}>
         <div className="relative" contentEditable={false}>
           <button
+            ref={btnRef}
             onClick={() => setShowPicker(!showPicker)}
             className="notion-callout-icon"
             title="Cambiar tipo"
@@ -300,7 +312,7 @@ function CalloutNodeView({ node, updateAttributes }) {
             {CALLOUT_VARIANTS[variant]?.icon || '💡'}
           </button>
           {showPicker && (
-            <div ref={pickerRef} className="notion-callout-picker">
+            <div ref={pickerRef} className={cn("notion-callout-picker", openUp && "notion-callout-picker-up")}>
               {Object.entries(CALLOUT_VARIANTS).map(([key, val]) => (
                 <button
                   key={key}
@@ -816,7 +828,648 @@ function normalize(str) {
 
 // ─── Block Editor ────────────────────────────────────────────────────────────
 
-export default function BlockEditor({ value, onChange, placeholder }) {
+// ─── Font Size Extension ─────────────────────────────────────────────────────
+
+const IndentExtension = Extension.create({
+  name: 'indent',
+  addGlobalAttributes() {
+    return [{
+      types: ['paragraph', 'heading'],
+      attributes: {
+        indent: {
+          default: 0,
+          parseHTML: element => parseInt(element.getAttribute('data-indent') || '0'),
+          renderHTML: attributes => {
+            if (!attributes.indent || attributes.indent <= 0) return {}
+            return { 'data-indent': attributes.indent, style: `margin-left: ${attributes.indent * 2}rem` }
+          },
+        },
+      },
+    }]
+  },
+})
+
+const FontSizeExtension = Extension.create({
+  name: 'fontSize',
+  addGlobalAttributes() {
+    return [{
+      types: ['textStyle'],
+      attributes: {
+        fontSize: {
+          default: null,
+          parseHTML: element => element.style.fontSize?.replace('px', '') || null,
+          renderHTML: attributes => {
+            if (!attributes.fontSize) return {}
+            return { style: `font-size: ${attributes.fontSize}px` }
+          },
+        },
+      },
+    }]
+  },
+})
+
+const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72]
+
+// ─── Table Colors ───────────────────────────────────────────────────────────
+
+const TABLE_COLORS = [
+  { name: 'Sin color', color: null },
+  { name: 'Gris claro', color: '#f1f5f9' },
+  { name: 'Rojo claro', color: '#fee2e2' },
+  { name: 'Naranja claro', color: '#ffedd5' },
+  { name: 'Amarillo claro', color: '#fef9c3' },
+  { name: 'Verde claro', color: '#dcfce7' },
+  { name: 'Azul claro', color: '#dbeafe' },
+  { name: 'Morado claro', color: '#f3e8ff' },
+  { name: 'Rosa claro', color: '#fce7f3' },
+]
+
+// ─── Table Settings (floating icon + dropdown) ─────────────────────────────
+
+function TableSettings({ editor }) {
+  const [open, setOpen] = useState(false)
+  const [showColorPicker, setShowColorPicker] = useState(false)
+  const [colorMode, setColorMode] = useState('cell')
+  const [btnPos, setBtnPos] = useState(null)
+  const [, forceUpdate] = useState(0)
+
+  // Re-render when editor state changes to track table presence/position
+  useEffect(() => {
+    if (!editor) return
+    const handler = () => forceUpdate(n => n + 1)
+    editor.on('transaction', handler)
+    return () => editor.off('transaction', handler)
+  }, [editor])
+
+  // Close dropdown when leaving table
+  useEffect(() => {
+    if (!editor?.isActive('table')) {
+      setOpen(false)
+      setShowColorPicker(false)
+    }
+  }, [editor?.isActive('table')])
+
+  // Calculate button position based on table DOM element
+  useEffect(() => {
+    if (!editor || !editor.isActive('table')) { setBtnPos(null); return }
+    try {
+      const { $from } = editor.state.selection
+      let depth = $from.depth
+      while (depth > 0 && $from.node(depth).type.name !== 'table') depth--
+      if (depth <= 0) { setBtnPos(null); return }
+      const tablePos = $from.before(depth)
+      const dom = editor.view.nodeDOM(tablePos)
+      if (dom) {
+        const rect = dom.getBoundingClientRect()
+        setBtnPos({ top: rect.top - 2, left: rect.right + 6 })
+      }
+    } catch { setBtnPos(null) }
+  })
+
+  if (!editor || !editor.isActive('table') || !btnPos) return null
+
+  const applyColor = (color) => {
+    if (colorMode === 'cell') {
+      editor.chain().focus().setCellAttribute('backgroundColor', color).run()
+    } else if (colorMode === 'row') {
+      const { state } = editor
+      const { $from } = state.selection
+      let rowDepth = $from.depth
+      while (rowDepth > 0 && $from.node(rowDepth).type.name !== 'tableRow') rowDepth--
+      if (rowDepth > 0) {
+        const rowNode = $from.node(rowDepth)
+        const rowStart = $from.before(rowDepth)
+        const tr = state.tr
+        let pos = rowStart + 1
+        for (let i = 0; i < rowNode.childCount; i++) {
+          const cell = rowNode.child(i)
+          tr.setNodeMarkup(pos, undefined, { ...cell.attrs, backgroundColor: color })
+          pos += cell.nodeSize
+        }
+        editor.view.dispatch(tr)
+      }
+    } else if (colorMode === 'column') {
+      const { state } = editor
+      const { $from } = state.selection
+      let cellDepth = $from.depth
+      while (cellDepth > 0 && !['tableCell', 'tableHeader'].includes($from.node(cellDepth).type.name)) cellDepth--
+      if (cellDepth > 0) {
+        const rowDepth = cellDepth - 1
+        const rowNode = $from.node(rowDepth)
+        let colIndex = 0
+        let pos = $from.before(rowDepth) + 1
+        for (let i = 0; i < rowNode.childCount; i++) {
+          if (pos === $from.before(cellDepth)) { colIndex = i; break }
+          pos += rowNode.child(i).nodeSize
+        }
+        let tableDepth = rowDepth - 1
+        while (tableDepth > 0 && $from.node(tableDepth).type.name !== 'table') tableDepth--
+        if (tableDepth >= 0) {
+          const tableNode = $from.node(tableDepth)
+          const tableStart = $from.before(tableDepth)
+          const tr = state.tr
+          let rowPos = tableStart + 1
+          for (let r = 0; r < tableNode.childCount; r++) {
+            const row = tableNode.child(r)
+            let cellPos = rowPos + 1
+            for (let c = 0; c < row.childCount; c++) {
+              if (c === colIndex) {
+                const cell = row.child(c)
+                tr.setNodeMarkup(cellPos, undefined, { ...cell.attrs, backgroundColor: color })
+              }
+              cellPos += row.child(c).nodeSize
+            }
+            rowPos += row.nodeSize
+          }
+          editor.view.dispatch(tr)
+        }
+      }
+    }
+    setShowColorPicker(false)
+  }
+
+  const MenuItem = ({ icon: Icon, label, onClick, danger }) => (
+    <button
+      onMouseDown={(e) => { e.preventDefault(); onClick() }}
+      className={cn(
+        'w-full flex items-center gap-2.5 px-3 py-1.5 text-sm transition-colors',
+        danger ? 'text-destructive hover:bg-destructive/10' : 'text-foreground hover:bg-accent'
+      )}
+    >
+      <Icon className="w-3.5 h-3.5 shrink-0" />
+      <span>{label}</span>
+    </button>
+  )
+
+  return createPortal(
+    <>
+      {/* Settings icon button */}
+      <button
+        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(prev => !prev); setShowColorPicker(false) }}
+        className={cn(
+          'fixed z-[50] w-7 h-7 rounded-lg border border-border/60 flex items-center justify-center transition-all',
+          open ? 'bg-accent text-foreground shadow-md' : 'bg-background text-muted-foreground hover:bg-accent hover:text-foreground shadow-sm'
+        )}
+        style={{ top: btnPos.top, left: btnPos.left }}
+        title="Opciones de tabla"
+      >
+        <Settings className="w-3.5 h-3.5" />
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <>
+          <div className="fixed inset-0 z-[9998]" onMouseDown={() => { setOpen(false); setShowColorPicker(false) }} />
+          <div
+            className="fixed z-[9999] rounded-xl border border-border bg-popover shadow-xl w-[200px] py-1 animate-scale-in"
+            style={{ top: btnPos.top + 32, left: btnPos.left }}
+            onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}
+          >
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 py-1">Filas</div>
+            <MenuItem icon={ArrowUpFromLine} label="Agregar arriba" onClick={() => { editor.chain().focus().addRowBefore().run() }} />
+            <MenuItem icon={ArrowDownFromLine} label="Agregar abajo" onClick={() => { editor.chain().focus().addRowAfter().run() }} />
+            <MenuItem icon={Trash2} label="Eliminar fila" onClick={() => { editor.chain().focus().deleteRow().run() }} danger />
+
+            <div className="border-t border-border my-1" />
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 py-1">Columnas</div>
+            <MenuItem icon={ArrowLeftFromLine} label="Agregar a la izquierda" onClick={() => { editor.chain().focus().addColumnBefore().run() }} />
+            <MenuItem icon={ArrowRightFromLine} label="Agregar a la derecha" onClick={() => { editor.chain().focus().addColumnAfter().run() }} />
+            <MenuItem icon={Trash2} label="Eliminar columna" onClick={() => { editor.chain().focus().deleteColumn().run() }} danger />
+
+            <div className="border-t border-border my-1" />
+            <button
+              onMouseDown={(e) => { e.preventDefault(); setShowColorPicker(prev => !prev) }}
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-foreground hover:bg-accent transition-colors"
+            >
+              <Paintbrush className="w-3.5 h-3.5 shrink-0" />
+              <span className="flex-1 text-left">Color de fondo</span>
+              <ChevronRight className="w-3 h-3 text-muted-foreground" />
+            </button>
+
+            {/* Color submenu */}
+            {showColorPicker && (
+              <div className="border-t border-border">
+                <div className="flex border-b border-border">
+                  {[
+                    { key: 'cell', label: 'Celda' },
+                    { key: 'row', label: 'Fila' },
+                    { key: 'column', label: 'Columna' },
+                  ].map(tab => (
+                    <button
+                      key={tab.key}
+                      onMouseDown={(e) => { e.preventDefault(); setColorMode(tab.key) }}
+                      className={cn(
+                        'flex-1 text-[10px] py-1.5 transition-colors',
+                        colorMode === tab.key
+                          ? 'text-foreground font-semibold border-b-2 border-primary'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-5 gap-1 p-2">
+                  {TABLE_COLORS.map(c => (
+                    <button
+                      key={c.name}
+                      onMouseDown={(e) => { e.preventDefault(); applyColor(c.color) }}
+                      className="notion-color-swatch"
+                      title={c.name}
+                    >
+                      {c.color ? (
+                        <span className="w-5 h-5 rounded-sm border border-border/50" style={{ background: c.color }} />
+                      ) : (
+                        <span className="w-5 h-5 rounded-sm border border-border/50 flex items-center justify-center text-muted-foreground relative">
+                          <span className="absolute w-[1px] h-6 bg-destructive rotate-45" />
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="border-t border-border my-1" />
+            <MenuItem icon={Trash2} label="Eliminar tabla" onClick={() => { editor.chain().focus().deleteTable().run(); setOpen(false) }} danger />
+          </div>
+        </>
+      )}
+    </>,
+    document.body
+  )
+}
+
+// ─── Fixed Toolbar ──────────────────────────────────────────────────────────
+
+export function FixedToolbar({ editor, onInsertImage, onOpenSlashMenu }) {
+  // Re-render toolbar when editor state changes (cursor move, formatting, etc.)
+  const [, forceUpdate] = useState(0)
+  useEffect(() => {
+    if (!editor) return
+    const handler = () => forceUpdate(n => n + 1)
+    editor.on('transaction', handler)
+    return () => editor.off('transaction', handler)
+  }, [editor])
+
+  const [showColors, setShowColors] = useState(false)
+  const [showHighlight, setShowHighlight] = useState(false)
+  const [showLinkPopover, setShowLinkPopover] = useState(false)
+  const [showStyleDropdown, setShowStyleDropdown] = useState(false)
+  const [linkUrl, setLinkUrl] = useState('')
+  const [linkPopoverPos, setLinkPopoverPos] = useState(null)
+  const savedSelectionRef = useRef(null)
+  const lastTextSelectionRef = useRef(null)
+  const colorsRef = useRef(null)
+  const highlightRef = useRef(null)
+  const linkRef = useRef(null)
+  const linkInputRef = useRef(null)
+  const styleRef = useRef(null)
+
+  // Track the last non-empty text selection continuously
+  useEffect(() => {
+    if (!editor) return
+    const onSelectionUpdate = ({ editor: e }) => {
+      const { from, to } = e.state.selection
+      if (from !== to) {
+        lastTextSelectionRef.current = { from, to }
+      }
+    }
+    editor.on('selectionUpdate', onSelectionUpdate)
+    return () => editor.off('selectionUpdate', onSelectionUpdate)
+  }, [editor])
+
+  // No auto-focus on link input — keeps editor focused so selection stays visible
+
+  // Dropdowns close via backdrop overlays, not document mousedown handler
+
+  if (!editor) return null
+
+  const closeAll = () => { setShowColors(false); setShowHighlight(false); setShowLinkPopover(false); setShowStyleDropdown(false) }
+
+  const applyLink = (url) => {
+    const sel = savedSelectionRef.current
+    if (!url.trim() || !sel || sel.from === sel.to) return
+    const href = url.trim().startsWith('http') ? url.trim() : `https://${url.trim()}`
+    // Set selection first (dispatches immediately), then apply link on that selection
+    editor.commands.setTextSelection({ from: sel.from, to: sel.to })
+    editor.commands.setLink({ href })
+  }
+
+  const getActiveStyle = () => {
+    if (editor.isActive('heading', { level: 1 })) return 'Título 1'
+    if (editor.isActive('heading', { level: 2 })) return 'Título 2'
+    if (editor.isActive('heading', { level: 3 })) return 'Título 3'
+    return 'Texto normal'
+  }
+
+  const styles = [
+    { label: 'Texto normal', action: () => editor.chain().focus().setParagraph().run(), active: !editor.isActive('heading'), cls: 'text-sm' },
+    { label: 'Título 1', action: () => editor.chain().focus().toggleHeading({ level: 1 }).run(), active: editor.isActive('heading', { level: 1 }), cls: 'text-xl font-bold' },
+    { label: 'Título 2', action: () => editor.chain().focus().toggleHeading({ level: 2 }).run(), active: editor.isActive('heading', { level: 2 }), cls: 'text-lg font-bold' },
+    { label: 'Título 3', action: () => editor.chain().focus().toggleHeading({ level: 3 }).run(), active: editor.isActive('heading', { level: 3 }), cls: 'text-base font-semibold' },
+  ]
+
+  const TBtn = ({ active, onClick, title, children }) => (
+    <button
+      onMouseDown={(e) => { e.preventDefault(); onClick() }}
+      title={title}
+      className={cn(
+        'p-1.5 rounded transition-colors',
+        active
+          ? 'bg-accent text-foreground'
+          : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+      )}
+    >
+      {children}
+    </button>
+  )
+
+  const Sep = () => <div className="w-px h-4 bg-border/60 mx-0.5" />
+
+  return (
+    <div className="flex items-center gap-0.5 px-2 py-1 border border-border/50 rounded-lg bg-muted/30 flex-wrap" onMouseDown={e => e.preventDefault()}>
+      {/* Estilo de párrafo */}
+      <div className="relative" ref={styleRef}>
+        <button
+          onMouseDown={(e) => { e.preventDefault(); closeAll(); setShowStyleDropdown(!showStyleDropdown) }}
+          className={cn(
+            'flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors min-w-[100px]',
+            showStyleDropdown ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+          )}
+        >
+          <span className="truncate">{getActiveStyle()}</span>
+          <ChevronDown className="w-3 h-3 shrink-0" />
+        </button>
+        {showStyleDropdown && createPortal(
+          <>
+            <div className="fixed inset-0 z-[9998]" onMouseDown={() => setShowStyleDropdown(false)} />
+            <div
+              className="fixed z-[9999] rounded-xl border border-border bg-popover shadow-xl py-1 w-[180px] animate-scale-in"
+              style={{ top: styleRef.current?.getBoundingClientRect().bottom + 6, left: styleRef.current?.getBoundingClientRect().left }}
+              onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}
+            >
+              {styles.map(s => (
+                <button
+                  key={s.label}
+                  onMouseDown={(e) => { e.preventDefault(); s.action(); setShowStyleDropdown(false) }}
+                  className={cn(
+                    'w-full text-left px-3 py-1.5 transition-colors',
+                    s.active ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                    s.cls
+                  )}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </>,
+          document.body
+        )}
+      </div>
+
+      <Sep />
+
+      {/* Negrita, Cursiva, Subrayado, Tachado */}
+      <TBtn active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} title="Negrita">
+        <Bold className="w-3.5 h-3.5" />
+      </TBtn>
+      <TBtn active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} title="Cursiva">
+        <Italic className="w-3.5 h-3.5" />
+      </TBtn>
+      <TBtn active={editor.isActive('underline')} onClick={() => editor.chain().focus().toggleUnderline().run()} title="Subrayado">
+        <UnderlineIcon className="w-3.5 h-3.5" />
+      </TBtn>
+      <TBtn active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()} title="Tachado">
+        <Strikethrough className="w-3.5 h-3.5" />
+      </TBtn>
+
+      <Sep />
+
+      {/* Color de texto */}
+      <div className="relative" ref={colorsRef}>
+        <TBtn active={showColors} onClick={() => { setShowHighlight(false); setShowLinkPopover(false); setShowStyleDropdown(false); setShowColors(prev => !prev) }} title="Color de texto">
+          <Palette className="w-3.5 h-3.5" />
+        </TBtn>
+        {showColors && createPortal(
+          <>
+            <div className="fixed inset-0 z-[9998]" onMouseDown={() => setShowColors(false)} />
+            <div
+              className="fixed z-[9999] rounded-xl border border-border bg-popover shadow-xl min-w-[170px] animate-scale-in"
+              style={{ top: colorsRef.current?.getBoundingClientRect().bottom + 6, left: colorsRef.current?.getBoundingClientRect().left - 50 }}
+              onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}
+            >
+              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 pt-2 pb-1">Color de texto</div>
+              <div className="grid grid-cols-5 gap-1 p-2">
+                {TEXT_COLORS.map(c => (
+                  <button key={c.name} onMouseDown={(e) => { e.preventDefault(); c.color ? editor.chain().focus().setColor(c.color).run() : editor.chain().focus().unsetColor().run(); setShowColors(false) }} className="notion-color-swatch" title={c.name}>
+                    <span style={{ color: c.color || 'var(--color-foreground)' }} className="text-sm font-bold">A</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>, document.body
+        )}
+      </div>
+
+      {/* Resaltado */}
+      <div className="relative" ref={highlightRef}>
+        <TBtn active={showHighlight} onClick={() => { setShowColors(false); setShowLinkPopover(false); setShowStyleDropdown(false); setShowHighlight(prev => !prev) }} title="Resaltado">
+          <Highlighter className="w-3.5 h-3.5" />
+        </TBtn>
+        {showHighlight && createPortal(
+          <>
+            <div className="fixed inset-0 z-[9998]" onMouseDown={() => setShowHighlight(false)} />
+            <div
+              className="fixed z-[9999] rounded-xl border border-border bg-popover shadow-xl min-w-[170px] animate-scale-in"
+              style={{ top: highlightRef.current?.getBoundingClientRect().bottom + 6, left: highlightRef.current?.getBoundingClientRect().left - 50 }}
+              onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}
+            >
+              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 pt-2 pb-1">Resaltado</div>
+              <div className="grid grid-cols-5 gap-1 p-2">
+                {HIGHLIGHT_COLORS.map(c => (
+                  <button key={c.name} onMouseDown={(e) => { e.preventDefault(); c.color ? editor.chain().focus().toggleHighlight({ color: c.color }).run() : editor.chain().focus().unsetHighlight().run(); setShowHighlight(false) }} className="notion-color-swatch" title={c.name}>
+                    {c.color ? (
+                      <span className="w-5 h-5 rounded-sm border border-border/50" style={{ background: c.color }} />
+                    ) : (
+                      <span className="w-5 h-5 rounded-sm border border-border/50 flex items-center justify-center text-muted-foreground relative">
+                        <span className="absolute w-[1px] h-6 bg-destructive rotate-45" />
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>, document.body
+        )}
+      </div>
+
+      <Sep />
+
+      {/* Enlace */}
+      <div className="relative" ref={linkRef}>
+        <TBtn active={editor.isActive('link') || showLinkPopover} onClick={() => {
+          if (editor.isActive('link')) {
+            editor.chain().focus().unsetLink().run()
+          } else {
+            const { from, to } = editor.state.selection
+            const sel = from !== to ? { from, to } : lastTextSelectionRef.current
+            savedSelectionRef.current = sel
+            // Get coordinates of selected text to position popover near it
+            if (sel) {
+              const endCoords = editor.view.coordsAtPos(sel.to)
+              setLinkPopoverPos({ top: endCoords.bottom + 6, left: endCoords.left })
+            }
+            setShowColors(false)
+            setShowHighlight(false)
+            setShowStyleDropdown(false)
+            setShowLinkPopover(prev => !prev)
+            setLinkUrl('')
+          }
+        }} title={editor.isActive('link') ? 'Quitar enlace' : 'Enlace'}>
+          {editor.isActive('link') ? <Unlink className="w-3.5 h-3.5" /> : <LinkIcon className="w-3.5 h-3.5" />}
+        </TBtn>
+        {showLinkPopover && linkPopoverPos && createPortal(
+          <>
+            <div className="fixed inset-0 z-[9998]" onMouseDown={() => { setShowLinkPopover(false); setLinkUrl(''); editor.commands.focus() }} />
+            <div
+              className="fixed z-[9999] rounded-xl border border-border bg-popover shadow-xl animate-scale-in p-3 w-[320px]"
+              style={{
+                top: linkPopoverPos.top,
+                left: Math.max(8, Math.min(linkPopoverPos.left, window.innerWidth - 340)),
+              }}
+              onMouseDown={e => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-background">
+                  <LinkIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <input
+                    ref={linkInputRef}
+                    value={linkUrl}
+                    onChange={e => setLinkUrl(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        applyLink(linkUrl)
+                        setShowLinkPopover(false)
+                        setLinkUrl('')
+                      }
+                      if (e.key === 'Escape') {
+                        setShowLinkPopover(false)
+                        setLinkUrl('')
+                        editor.commands.focus()
+                      }
+                    }}
+                    placeholder="Pegar o escribir un enlace..."
+                    className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                  />
+                </div>
+                <button
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    applyLink(linkUrl)
+                    setShowLinkPopover(false)
+                    setLinkUrl('')
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium text-primary hover:bg-accent transition-colors shrink-0"
+                >
+                  Aplicar
+                </button>
+              </div>
+            </div>
+          </>,
+          document.body
+        )}
+      </div>
+
+      {/* Insertar imagen */}
+      {onInsertImage && (
+        <TBtn active={false} onClick={onInsertImage} title="Insertar imagen">
+          <ImageIcon className="w-3.5 h-3.5" />
+        </TBtn>
+      )}
+
+      <Sep />
+
+      {/* Alineación */}
+      <TBtn active={editor.isActive({ textAlign: 'left' })} onClick={() => editor.chain().focus().setTextAlign('left').run()} title="Alinear izquierda">
+        <AlignLeft className="w-3.5 h-3.5" />
+      </TBtn>
+      <TBtn active={editor.isActive({ textAlign: 'center' })} onClick={() => editor.chain().focus().setTextAlign('center').run()} title="Centrar">
+        <AlignCenter className="w-3.5 h-3.5" />
+      </TBtn>
+      <TBtn active={editor.isActive({ textAlign: 'right' })} onClick={() => editor.chain().focus().setTextAlign('right').run()} title="Alinear derecha">
+        <AlignRight className="w-3.5 h-3.5" />
+      </TBtn>
+      <TBtn active={editor.isActive({ textAlign: 'justify' })} onClick={() => editor.chain().focus().setTextAlign('justify').run()} title="Justificar">
+        <AlignJustify className="w-3.5 h-3.5" />
+      </TBtn>
+
+      <Sep />
+
+      {/* Listas */}
+      <TBtn active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()} title="Lista con viñetas">
+        <List className="w-3.5 h-3.5" />
+      </TBtn>
+      <TBtn active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()} title="Lista numerada">
+        <ListOrdered className="w-3.5 h-3.5" />
+      </TBtn>
+      <TBtn active={editor.isActive('taskList')} onClick={() => editor.chain().focus().toggleTaskList().run()} title="Checklist">
+        <CheckSquare className="w-3.5 h-3.5" />
+      </TBtn>
+
+      <Sep />
+
+      {/* Sangría */}
+      <TBtn active={false} onClick={() => {
+        if (editor.can().sinkListItem('listItem')) {
+          editor.chain().focus().sinkListItem('listItem').run()
+        } else if (editor.can().sinkListItem('taskItem')) {
+          editor.chain().focus().sinkListItem('taskItem').run()
+        } else {
+          const nodeType = editor.state.selection.$from.parent.type.name
+          const current = parseInt(editor.getAttributes(nodeType).indent || '0')
+          editor.chain().focus().updateAttributes(nodeType, { indent: current + 1 }).run()
+        }
+      }} title="Aumentar sangría">
+        <IndentIncrease className="w-3.5 h-3.5" />
+      </TBtn>
+      <TBtn active={false} onClick={() => {
+        if (editor.can().liftListItem('listItem')) {
+          editor.chain().focus().liftListItem('listItem').run()
+        } else if (editor.can().liftListItem('taskItem')) {
+          editor.chain().focus().liftListItem('taskItem').run()
+        } else {
+          const nodeType = editor.state.selection.$from.parent.type.name
+          const current = parseInt(editor.getAttributes(nodeType).indent || '0')
+          if (current > 0) {
+            editor.chain().focus().updateAttributes(nodeType, { indent: current - 1 }).run()
+          }
+        }
+      }} title="Reducir sangría">
+        <IndentDecrease className="w-3.5 h-3.5" />
+      </TBtn>
+
+      <Sep />
+
+      {/* Limpiar formato */}
+      <TBtn active={false} onClick={() => editor.chain().focus().unsetAllMarks().run()} title="Limpiar formato">
+        <RemoveFormatting className="w-3.5 h-3.5" />
+      </TBtn>
+
+      <Sep />
+
+      {/* Insertar bloque (slash menu) */}
+      {onOpenSlashMenu && (
+        <TBtn active={false} onClick={onOpenSlashMenu} title="Insertar bloque">
+          <Plus className="w-3.5 h-3.5" />
+        </TBtn>
+      )}
+    </div>
+  )
+}
+
+export default function BlockEditor({ value, onChange, placeholder, showFixedToolbar = false, onEditorReady, toolbarContainerRef }) {
   const [slashMenu, setSlashMenu] = useState(null)
   const [slashFilter, setSlashFilter] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -863,12 +1516,36 @@ export default function BlockEditor({ value, onChange, placeholder }) {
         HTMLAttributes: { class: 'notion-link' },
       }),
       TextStyle,
+      FontSizeExtension,
+      IndentExtension,
       TiptapColor,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Table.configure({ resizable: true }),
       TableRow,
-      TableCell,
-      TableHeader,
+      TableCell.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            backgroundColor: {
+              default: null,
+              parseHTML: el => el.style.backgroundColor || null,
+              renderHTML: attrs => attrs.backgroundColor ? { style: `background-color: ${attrs.backgroundColor}` } : {},
+            },
+          }
+        },
+      }),
+      TableHeader.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            backgroundColor: {
+              default: null,
+              parseHTML: el => el.style.backgroundColor || null,
+              renderHTML: attrs => attrs.backgroundColor ? { style: `background-color: ${attrs.backgroundColor}` } : {},
+            },
+          }
+        },
+      }),
       // Custom blocks
       Callout,
       ToggleBlock,
@@ -931,6 +1608,11 @@ export default function BlockEditor({ value, onChange, placeholder }) {
     },
   })
 
+  // Notify parent when editor is ready (optional)
+  useEffect(() => {
+    if (editor && onEditorReady) onEditorReady(editor)
+  }, [editor])
+
   useEffect(() => {
     const close = (e) => {
       if (slashMenuRef.current && !slashMenuRef.current.contains(e.target)) {
@@ -951,11 +1633,14 @@ export default function BlockEditor({ value, onChange, placeholder }) {
     if (!item || !editor) return
 
     const { from } = editor.state.selection
-    const textBefore = editor.state.doc.textBetween(Math.max(0, from - slashFilter.length - 1), from)
-    const slashPos = textBefore.lastIndexOf('/')
-    if (slashPos >= 0) {
-      const deleteFrom = from - (textBefore.length - slashPos)
-      editor.chain().focus().deleteRange({ from: deleteFrom, to: from }).run()
+    const searchLen = slashFilter.length + 1
+    if (searchLen > 0 && from >= searchLen) {
+      const textBefore = editor.state.doc.textBetween(Math.max(0, from - searchLen), from)
+      const slashPos = textBefore.lastIndexOf('/')
+      if (slashPos >= 0) {
+        const deleteFrom = from - (textBefore.length - slashPos)
+        editor.chain().focus().deleteRange({ from: deleteFrom, to: from }).run()
+      }
     }
 
     if (item.isFile) {
@@ -1020,6 +1705,29 @@ export default function BlockEditor({ value, onChange, placeholder }) {
     <div className="block-editor relative">
       <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileUpload} />
 
+      {/* Fixed toolbar - portal to external container if provided, otherwise sticky inside */}
+      {showFixedToolbar && (() => {
+        const toolbarContent = (
+          <FixedToolbar editor={editor} onInsertImage={() => fileInputRef.current?.click()} onOpenSlashMenu={() => {
+            editor.commands.focus()
+            setTimeout(() => {
+              const { from } = editor.state.selection
+              const coords = editor.view.coordsAtPos(from)
+              setSlashMenu({ x: coords.left, y: coords.bottom + 4 })
+              setSlashFilter('')
+              setSelectedIndex(0)
+            }, 0)
+          }} />
+        )
+        if (toolbarContainerRef?.current) {
+          return createPortal(toolbarContent, toolbarContainerRef.current)
+        }
+        return <div className="sticky top-0 z-10 bg-background pb-3">{toolbarContent}</div>
+      })()}
+
+      {/* Table settings icon (floating near table) */}
+      {showFixedToolbar && editor && <TableSettings editor={editor} />}
+
       {uploading && (
         <div className="flex items-center gap-2 px-3 py-2 mb-2 rounded-lg bg-muted/50 text-sm text-muted-foreground">
           <Loader2 className="w-4 h-4 animate-spin" />
@@ -1027,8 +1735,8 @@ export default function BlockEditor({ value, onChange, placeholder }) {
         </div>
       )}
 
-      {/* Bubble menu */}
-      {editor && <EditorBubbleMenu editor={editor} />}
+      {/* Bubble menu (only when no fixed toolbar) */}
+      {!showFixedToolbar && editor && <EditorBubbleMenu editor={editor} />}
 
       <EditorContent editor={editor} />
 

@@ -27,6 +27,7 @@ export default function NotesPage() {
   const [saveStatus, setSaveStatus] = useState(null)
   const saveTimer = useRef(null)
   const titleTimer = useRef(null)
+  const toolbarContainerRef = useRef(null)
 
   const noteId = state.currentBoard?.noteId
 
@@ -95,8 +96,9 @@ export default function NotesPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[900px] px-16 py-12">
+      {/* Sticky header: title + meta + separator */}
+      <div className="shrink-0 bg-background z-10">
+        <div className="mx-auto w-full max-w-[900px] px-16 pt-8 pb-4 border-b border-border">
           {/* Title */}
           <div className="flex items-center justify-between mb-3">
             <input
@@ -123,7 +125,7 @@ export default function NotesPage() {
           </div>
 
           {/* Meta */}
-          <div className="flex items-center gap-6 text-sm text-muted-foreground mb-8">
+          <div className="flex items-center gap-6 text-sm text-muted-foreground mb-4">
             <div className="flex items-center gap-2">
               {creatorAvatar ? (
                 <img src={creatorAvatar} alt="" className="w-5 h-5 rounded-full object-cover" />
@@ -143,11 +145,20 @@ export default function NotesPage() {
             </div>
           </div>
 
-          {/* Editor */}
+          {/* Toolbar container - rendered here by BlockEditor via portal */}
+          <div ref={toolbarContainerRef} />
+        </div>
+      </div>
+
+      {/* Scrollable editor */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[900px] px-16 pt-6 pb-24">
           <BlockEditor
             value={content}
             onChange={handleChange}
             placeholder="Escribe tus notas aquí... Usa '/' para ver comandos"
+            showFixedToolbar
+            toolbarContainerRef={toolbarContainerRef}
           />
         </div>
       </div>
