@@ -1474,8 +1474,14 @@ export default function BlockEditor({ value, onChange, placeholder, showFixedToo
   const [slashFilter, setSlashFilter] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [uploading, setUploading] = useState(false)
+  const [portalReady, setPortalReady] = useState(false)
   const slashMenuRef = useRef(null)
   const fileInputRef = useRef(null)
+
+  // Force re-render after mount so toolbarContainerRef is available for portal
+  useEffect(() => {
+    if (toolbarContainerRef) setPortalReady(true)
+  }, [toolbarContainerRef])
   const pendingAction = useRef(null)
 
   const getInitialContent = () => {
@@ -1719,8 +1725,8 @@ export default function BlockEditor({ value, onChange, placeholder, showFixedToo
             }, 0)
           }} />
         )
-        if (toolbarContainerRef?.current) {
-          return createPortal(toolbarContent, toolbarContainerRef.current)
+        if (toolbarContainerRef) {
+          return toolbarContainerRef.current ? createPortal(toolbarContent, toolbarContainerRef.current) : null
         }
         return <div className="sticky top-0 z-10 bg-background pb-3">{toolbarContent}</div>
       })()}
