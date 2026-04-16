@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Columns3, Check } from 'lucide-react'
+import { Settings2, Check } from 'lucide-react'
 
 const DEFAULT_COLUMNS = [
   { key: 'assignee', label: 'Responsable' },
@@ -35,8 +35,8 @@ export default function ColumnToggle({ customFields = [], visibleColumns, onTogg
         onClick={() => setOpen(!open)}
         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
       >
-        <Columns3 className="w-3.5 h-3.5" />
-        Campos visibles
+        <Settings2 className="w-3.5 h-3.5" />
+        Visibilidad
       </button>
 
       {open && (

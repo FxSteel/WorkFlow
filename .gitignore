@@ -26,3 +26,9 @@ dist-ssr
 
 # Security
 SECURITY_AUDIT.md
+
+# MCP / Supabase Edge Functions (internal config)
+.mcp.json
+mcp/
+supabase/
+emails/

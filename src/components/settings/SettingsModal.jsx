@@ -5,6 +5,7 @@ import {
   SlidersHorizontal, PanelRight, Maximize2, Layers,
   CreditCard, Sparkles, Check, ExternalLink,
   Mail, Send, Shield, UserPlus, Clock, Users, MoreHorizontal,
+  Copy, Bot,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useApp } from '../../context/AppContext'
@@ -28,7 +29,7 @@ const TABS = [
   { id: 'preferences', label: 'Preferencias', icon: SlidersHorizontal },
   { id: 'notifications', label: 'Notificaciones', icon: Bell },
   { id: 'billing', label: 'Facturación', icon: CreditCard },
-  { id: 'connections', label: 'Conexiones', icon: Link2, disabled: true },
+  { id: 'connections', label: 'Conexiones', icon: Link2 },
 ]
 
 export default function SettingsModal({ isOpen, onClose }) {
@@ -101,6 +102,7 @@ export default function SettingsModal({ isOpen, onClose }) {
             {activeTab === 'preferences' && <PreferencesSettings />}
             {activeTab === 'billing' && <BillingSettings />}
             {activeTab === 'notifications' && <NotificationSettings />}
+            {activeTab === 'connections' && <ConnectionsSettings />}
           </div>
         </div>
       </div>
@@ -1200,6 +1202,183 @@ function NotificationSettings() {
               </button>
             </div>
           ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ConnectionsSettings() {
+  const { user } = useAuth()
+  const [copiedUrl, setCopiedUrl] = useState(false)
+  const [tokenGenerated, setTokenGenerated] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [mcpUrl, setMcpUrl] = useState('')
+
+  const MCP_BASE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mcp`
+
+  const handleGenerateToken = async () => {
+    setGenerating(true)
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error || !session) {
+        toast.error('No se pudo obtener la sesión. Intenta cerrar sesión y volver a entrar.')
+        return
+      }
+      // Use refresh_token for persistent connection (doesn't expire on its own)
+      setMcpUrl(`${MCP_BASE_URL}?refresh_token=${session.refresh_token}`)
+      setTokenGenerated(true)
+      if (tokenGenerated) {
+        toast.success('URL regenerada correctamente')
+      }
+    } catch (err) {
+      toast.error('Error al generar la URL. Intenta de nuevo.')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const handleCopyUrl = () => {
+    if (!mcpUrl) return
+    navigator.clipboard.writeText(mcpUrl)
+    setCopiedUrl(true)
+    toast.success('URL copiada al portapapeles')
+    setTimeout(() => setCopiedUrl(false), 2000)
+  }
+
+  return (
+    <div className="px-6 py-5 space-y-6">
+      {/* Claude MCP */}
+      <div>
+        <div className="flex items-center gap-2.5 mb-1">
+          <Bot className="w-5 h-5 text-[#D97706]" />
+          <h4 className="text-sm font-semibold text-foreground">Claude AI</h4>
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">
+          Conecta tu cuenta a Claude para gestionar tareas, boards, sprints y notas con lenguaje natural.
+          Funciona con cualquier método de inicio de sesión (Google, email, etc.).
+        </p>
+
+        {/* Steps */}
+        <div className="space-y-3 mb-4">
+          <div className="flex gap-3">
+            <span className="shrink-0 w-5 h-5 rounded-full bg-foreground text-background text-xs font-bold flex items-center justify-center mt-0.5">1</span>
+            <div>
+              <p className="text-sm text-foreground font-medium">Genera tu URL de conexión</p>
+              <p className="text-xs text-muted-foreground">
+                Haz clic en el botón de abajo para generar una URL única con tu sesión
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <span className="shrink-0 w-5 h-5 rounded-full bg-foreground text-background text-xs font-bold flex items-center justify-center mt-0.5">2</span>
+            <div>
+              <p className="text-sm text-foreground font-medium">Pega la URL en Claude</p>
+              <p className="text-xs text-muted-foreground">
+                Ve a{' '}
+                <a href="https://claude.ai" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-0.5">
+                  claude.ai <ExternalLink className="w-3 h-3" />
+                </a>
+                {' '}→ Configuración → Conectores → Agregar conector → pega la URL
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <span className="shrink-0 w-5 h-5 rounded-full bg-foreground text-background text-xs font-bold flex items-center justify-center mt-0.5">3</span>
+            <div>
+              <p className="text-sm text-foreground font-medium">Listo, habla con Claude</p>
+              <p className="text-xs text-muted-foreground">
+                Pídele que cree tareas, boards, sprints o notas en lenguaje natural
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Generate / URL block */}
+        {!tokenGenerated ? (
+          <button
+            onClick={handleGenerateToken}
+            disabled={generating}
+            className="w-full py-2.5 px-4 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {generating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generando...
+              </>
+            ) : (
+              <>
+                <Bot className="w-4 h-4" />
+                Generar URL de conexión
+              </>
+            )}
+          </button>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0 bg-muted/60 border border-border rounded-lg px-3 py-2.5 font-mono text-[11px] text-foreground truncate">
+                {mcpUrl}
+              </div>
+              <button
+                onClick={handleCopyUrl}
+                className={cn(
+                  'shrink-0 px-3 py-2.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 transition-all',
+                  copiedUrl
+                    ? 'bg-green-500/10 border-green-500/30 text-green-600'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground hover:bg-accent'
+                )}
+              >
+                {copiedUrl ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedUrl ? 'Copiada' : 'Copiar'}
+              </button>
+            </div>
+
+            <div className="mt-2 flex items-start gap-2 p-2.5 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+              <AlertTriangle className="w-3.5 h-3.5 text-yellow-600 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-yellow-700 dark:text-yellow-400">
+                Esta URL contiene tu token personal. No la compartas con nadie.
+                Si cierras sesión, necesitarás generar una nueva.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleGenerateToken}
+              disabled={generating}
+              className="mt-3 w-full py-2 px-4 rounded-lg text-xs font-medium bg-secondary text-secondary-foreground hover:bg-accent transition-colors flex items-center justify-center gap-1.5 disabled:opacity-60"
+            >
+              {generating ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Regenerando...
+                </>
+              ) : (
+                'Regenerar URL'
+              )}
+            </button>
+          </>
+        )}
+
+        {/* Capabilities */}
+        <div className="mt-4 p-3 bg-muted/30 rounded-lg border border-border">
+          <p className="text-xs font-medium text-foreground mb-2">Lo que puedes hacer desde Claude:</p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+            {[
+              'Crear y editar tareas',
+              'Gestionar boards',
+              'Crear sprints',
+              'Escribir notas',
+              'Buscar tareas',
+              'Crear tareas en lote',
+              'Ver miembros del equipo',
+              'Asignar tareas',
+            ].map(cap => (
+              <p key={cap} className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Check className="w-3 h-3 text-green-500 shrink-0" />
+                {cap}
+              </p>
+            ))}
+          </div>
         </div>
       </div>
     </div>

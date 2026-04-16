@@ -18,6 +18,7 @@ export default function SprintModal({ isOpen, onClose }) {
   const { user } = useAuth()
   const { createSprint } = useSupabase()
   const { notifyNewSprint } = useNotifications()
+  const { can } = usePermissions()
   const [form, setForm] = useState({
     name: '',
     start_date: '',
@@ -27,8 +28,6 @@ export default function SprintModal({ isOpen, onClose }) {
   })
 
   if (!isOpen) return null
-
-  const { can } = usePermissions()
 
   const handleSave = async () => {
     if (!can('createSprint') || !form.name.trim()) return
