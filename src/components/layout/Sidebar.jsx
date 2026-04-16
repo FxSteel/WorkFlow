@@ -31,6 +31,7 @@ import SidebarSkeleton from '../skeleton/SidebarSkeleton'
 import TeamPresence from '../workspace/TeamPresence'
 import ColorPicker from '../ui/ColorPicker'
 import { toast } from 'sonner'
+import { useTheme } from '../../context/ThemeContext'
 
 const WORKSPACE_COLORS = [
   '#6c5ce7', '#0984e3', '#00b894', '#e17055', '#fdcb6e',
@@ -40,6 +41,7 @@ const WORKSPACE_COLORS = [
 export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
   const { state, dispatch } = useApp()
   const { user } = useAuth()
+  const { theme } = useTheme()
   const {
     createWorkspace, createBoard, deleteWorkspace, updateWorkspace, fetchBoards,
     deleteBoard, updateBoard, createOrganization, updateOrganization, deleteOrganization, fetchWorkspaces,
@@ -392,9 +394,14 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
       {/* Header */}
       <div className="p-3 flex items-center border-b border-sidebar-border">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-primary-foreground" />
-          </div>
+          <img
+            src={theme === 'dark'
+              ? 'https://fkhukpqhmpudsarnusvf.supabase.co/storage/v1/object/public/attachments/w-icons/w4-blanco.png'
+              : 'https://fkhukpqhmpudsarnusvf.supabase.co/storage/v1/object/public/attachments/w-icons/w-negro.png'
+            }
+            alt="WorkFlow"
+            className="w-8 h-8 rounded-lg"
+          />
           <span className="font-semibold text-sm text-sidebar-foreground">WorkFlow</span>
         </div>
       </div>
