@@ -214,7 +214,7 @@ export default function NotificationCenter() {
             ) : (
               <>
                 {/* Invites */}
-                {invites.length > 0 && activeTab === 'all' && (
+                {invites.length > 0 && (activeTab === 'all' || activeTab === 'unread') && (
                   <div>
                     {invites.map(invite => (
                       <div key={invite.id} className="px-4 py-3 border-b border-border bg-primary/5 hover:bg-accent/30 transition-colors">

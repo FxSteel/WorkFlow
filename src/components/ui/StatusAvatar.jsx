@@ -31,6 +31,7 @@ export default function StatusAvatar({
   size = 'md',
   status = 'online',
   showStatus = true,
+  bgColor,
   className,
   onClick,
 }) {
@@ -64,8 +65,10 @@ export default function StatusAvatar({
         <div
           className={cn(
             s.avatar,
-            'rounded-full bg-primary flex items-center justify-center font-semibold text-primary-foreground'
+            'rounded-full flex items-center justify-center font-semibold text-white',
+            !bgColor && 'bg-primary text-primary-foreground'
           )}
+          style={bgColor ? { backgroundColor: bgColor } : undefined}
         >
           {initial}
         </div>

@@ -269,11 +269,11 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
       </div>
 
       {/* Assignee */}
-      <div style={{ order: colOrder['assignee'] ?? 1 }} className={`py-2.5 flex items-center justify-center ${isColVisible('assignee') ? 'px-3' : 'overflow-hidden w-0 p-0'}`}>
+      <div style={{ order: colOrder['assignee'] ?? 1 }} className={`py-2.5 flex items-center ${isColVisible('assignee') ? 'px-3' : 'overflow-hidden w-0 p-0'}`}>
         <button
           ref={assignee.triggerRef}
           onClick={() => { if (!can('editTask')) return; assignee.updatePos('left', 176); assignee.setOpen(!assignee.open) }}
-          className="flex items-center gap-1.5 hover:bg-accent rounded px-1.5 py-0.5 transition-colors"
+          className="flex items-center gap-1.5 hover:bg-accent rounded px-1.5 py-0.5 transition-colors w-full"
         >
           {task.assignee_name ? (
             (() => {

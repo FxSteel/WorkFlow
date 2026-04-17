@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  Sparkles, CreditCard, Check, Loader2, ExternalLink, LogOut,
+  CreditCard, Check, Loader2, ExternalLink, LogOut,
   Sun, Moon, Lock, Unlock, ArrowRight, Mail,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
@@ -158,9 +158,14 @@ export default function Paywall({ currentOrg, organizations, orgAccess, isOwner 
       {/* Top bar */}
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-primary-foreground" />
-          </div>
+          <img
+            src={theme === 'dark'
+              ? 'https://fkhukpqhmpudsarnusvf.supabase.co/storage/v1/object/public/attachments/w-icons/w4-blanco.png'
+              : 'https://fkhukpqhmpudsarnusvf.supabase.co/storage/v1/object/public/attachments/w-icons/w-negro.png'
+            }
+            alt="WorkFlow"
+            className="w-8 h-8 rounded-lg"
+          />
           <span className="font-semibold text-foreground">WorkFlow</span>
         </div>
         <div className="flex items-center gap-2">

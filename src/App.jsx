@@ -170,21 +170,15 @@ function AppContent() {
   const pref = getTaskEditorPref()
   const showFullPage = pref === 'fullpage' && (state.isTaskModalOpen || state.isSidePanelOpen)
 
-  // Show onboarding only if user has no organizations AND no pending invites
-  const [hasPendingInvites, setHasPendingInvites] = useState(false)
-  useEffect(() => {
-    if (orgsLoaded && state.organizations.length === 0 && user?.email) {
-      supabase
-        .from('org_invites')
-        .select('id')
-        .eq('email', user.email)
-        .eq('status', 'pending')
-        .limit(1)
-        .then(({ data }) => setHasPendingInvites(data && data.length > 0))
-    }
-  }, [orgsLoaded, state.organizations.length, user?.email])
+  if (!orgsLoaded) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    )
+  }
 
-  if (orgsLoaded && state.organizations.length === 0 && !hasPendingInvites) {
+  if (state.organizations.length === 0) {
     return <CreateOrgScreen />
   }
 

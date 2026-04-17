@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Users, LayoutDashboard, CheckSquare, CreditCard,
   Search, Shield, Loader2, ChevronDown, ChevronUp,
-  Sparkles, Sun, Moon, Check,
+  Sun, Moon, Check,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
@@ -195,9 +195,14 @@ export default function AdminPanel() {
       <div className="border-b border-border bg-card">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-primary-foreground" />
-            </div>
+            <img
+              src={theme === 'dark'
+                ? 'https://fkhukpqhmpudsarnusvf.supabase.co/storage/v1/object/public/attachments/w-icons/w4-blanco.png'
+                : 'https://fkhukpqhmpudsarnusvf.supabase.co/storage/v1/object/public/attachments/w-icons/w-negro.png'
+              }
+              alt="WorkFlow"
+              className="w-8 h-8 rounded-lg"
+            />
             <div>
               <h1 className="text-lg font-bold text-foreground">WorkFlow Admin</h1>
               <p className="text-[11px] text-muted-foreground">Panel de administración</p>

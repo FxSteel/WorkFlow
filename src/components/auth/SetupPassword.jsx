@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Lock, Eye, EyeOff, Sparkles, ArrowRight, AlertCircle, Loader2 } from 'lucide-react'
+import { Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { Sun, Moon } from 'lucide-react'
@@ -60,9 +60,14 @@ export default function SetupPassword() {
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-[400px] animate-fade-in">
           <div className="flex items-center gap-2 mb-8 justify-center">
-            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-primary-foreground" />
-            </div>
+            <img
+              src={theme === 'dark'
+                ? 'https://fkhukpqhmpudsarnusvf.supabase.co/storage/v1/object/public/attachments/w-icons/w4-blanco.png'
+                : 'https://fkhukpqhmpudsarnusvf.supabase.co/storage/v1/object/public/attachments/w-icons/w-negro.png'
+              }
+              alt="WorkFlow"
+              className="w-9 h-9 rounded-lg"
+            />
             <span className="text-lg font-bold text-foreground">WorkFlow</span>
           </div>
 

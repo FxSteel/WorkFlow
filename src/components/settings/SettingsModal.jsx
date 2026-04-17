@@ -3,7 +3,7 @@ import {
   X, Settings, Bell, Link2, Building2, Trash2,
   AlertTriangle, Upload, CheckCircle2, Loader2,
   SlidersHorizontal, PanelRight, Maximize2, Layers,
-  CreditCard, Sparkles, Check, ExternalLink,
+  CreditCard, Check, ExternalLink,
   Mail, Send, Shield, UserPlus, Clock, Users, MoreHorizontal,
   Copy, Bot,
 } from 'lucide-react'
@@ -13,6 +13,7 @@ import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
 import { toast } from 'sonner'
 import { useSupabase } from '../../hooks/useSupabase'
+import { useTheme } from '../../context/ThemeContext'
 import { supabaseAdmin } from '../../lib/supabase-admin'
 import { usePermissions, ROLE_PRESETS } from '../../hooks/usePermissions'
 import PermissionEditor from '../ui/PermissionEditor'
@@ -853,6 +854,7 @@ function PreferencesSettings() {
 function BillingSettings() {
   const { user } = useAuth()
   const { state } = useApp()
+  const { theme } = useTheme()
   const [subscription, setSubscription] = useState(null)
   const [loading, setLoading] = useState(true)
   const [paying, setPaying] = useState(false)
@@ -1003,12 +1005,14 @@ function BillingSettings() {
         )}>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className={cn(
-                'w-10 h-10 rounded-lg flex items-center justify-center',
-                isPro ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground'
-              )}>
-                <Sparkles className="w-5 h-5" />
-              </div>
+              <img
+                src={theme === 'dark'
+                  ? 'https://fkhukpqhmpudsarnusvf.supabase.co/storage/v1/object/public/attachments/w-icons/w4-blanco.png'
+                  : 'https://fkhukpqhmpudsarnusvf.supabase.co/storage/v1/object/public/attachments/w-icons/w-negro.png'
+                }
+                alt="WorkFlow"
+                className="w-10 h-10 rounded-lg"
+              />
               <div>
                 <h3 className="text-lg font-bold text-foreground">WorkFlow Pro</h3>
                 <p className="text-xs text-muted-foreground">

@@ -92,6 +92,8 @@ export default function Topbar({ onNewTask, onNewSprint, onOpenSettings, onOpenP
 
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuario'
   const userAvatar = user?.user_metadata?.avatar_url
+  const currentMember = state.orgMembers.find(m => m.user_id === user?.id)
+  const userColor = currentMember?.color || '#6c5ce7'
 
   const handleSignOut = async () => {
     await changeStatus('invisible', null)
@@ -191,7 +193,7 @@ export default function Topbar({ onNewTask, onNewSprint, onOpenSettings, onOpenP
             {userAvatar ? (
               <img src={userAvatar} alt={userName} className="w-8 h-8 rounded-full object-cover" referrerPolicy="no-referrer" />
             ) : (
-              <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-[11px] font-semibold text-primary-foreground">
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold text-white" style={{ backgroundColor: userColor }}>
                 {userName[0]?.toUpperCase()}
               </div>
             )}
@@ -207,6 +209,7 @@ export default function Topbar({ onNewTask, onNewSprint, onOpenSettings, onOpenP
                   size="lg"
                   status={userStatus}
                   showStatus={true}
+                  bgColor={!userAvatar ? userColor : undefined}
                 />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-foreground truncate">{userName}</p>

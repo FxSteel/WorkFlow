@@ -408,7 +408,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
 
       {/* Organization Selector */}
       {state.currentOrg && (
-        <div className="px-2 pt-2 pb-1" ref={orgDropdownRef}>
+        <div className="px-2 pt-2 pb-1 relative" ref={orgDropdownRef}>
           <button
             onClick={() => setShowOrgDropdown(!showOrgDropdown)}
             className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-accent transition-colors"
@@ -430,7 +430,7 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
           </button>
 
           {showOrgDropdown && (
-            <div className="mt-1 rounded-lg border border-border bg-popover shadow-lg py-1 z-50 animate-scale-in">
+            <div className="absolute left-full top-0 ml-2 w-64 rounded-lg border border-border bg-popover shadow-lg py-1 z-50 animate-scale-in">
               {state.organizations.map(org => {
                 const isOwner = org.owner_id === user?.id
                 return (

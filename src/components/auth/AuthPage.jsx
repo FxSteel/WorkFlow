@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  Mail, Lock, User, Eye, EyeOff, Sparkles,
+  Mail, Lock, User, Eye, EyeOff,
   ArrowRight, AlertCircle, CheckCircle2, Loader2,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
@@ -109,9 +109,11 @@ export default function AuthPage() {
 
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
+            <img
+              src="https://fkhukpqhmpudsarnusvf.supabase.co/storage/v1/object/public/attachments/w-icons/w4-blanco.png"
+              alt="WorkFlow"
+              className="w-10 h-10 rounded-xl"
+            />
             <span className="text-xl font-bold text-white">WorkFlow</span>
           </div>
         </div>
@@ -155,9 +157,14 @@ export default function AuthPage() {
           <div className="w-full max-w-[400px] animate-fade-in">
             {/* Mobile logo */}
             <div className="lg:hidden flex items-center gap-2 mb-8 justify-center">
-              <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-primary-foreground" />
-              </div>
+              <img
+                src={theme === 'dark'
+                  ? 'https://fkhukpqhmpudsarnusvf.supabase.co/storage/v1/object/public/attachments/w-icons/w4-blanco.png'
+                  : 'https://fkhukpqhmpudsarnusvf.supabase.co/storage/v1/object/public/attachments/w-icons/w-negro.png'
+                }
+                alt="WorkFlow"
+                className="w-9 h-9 rounded-lg"
+              />
               <span className="text-lg font-bold text-foreground">WorkFlow</span>
             </div>
 

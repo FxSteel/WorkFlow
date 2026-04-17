@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { supabaseAdmin } from '../lib/supabase-admin'
 import { useApp } from '../context/AppContext'
 
 export function useSupabase() {
@@ -43,6 +44,7 @@ export function useSupabase() {
             email: ownerEmail,
             role: 'owner',
             color: '#000000',
+            avatar_url: userData?.user?.user_metadata?.avatar_url || null,
           })
       }
 
@@ -134,6 +136,33 @@ export function useSupabase() {
       }
     }
     if (!error && data) {
+      // Sync avatar_url and name from auth metadata for ALL members
+      if (supabaseAdmin) {
+        try {
+          const userIds = data.filter(m => m.user_id).map(m => m.user_id)
+          const { data: { users: authUsers } } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 })
+          if (authUsers) {
+            const authMap = Object.fromEntries(authUsers.map(u => [u.id, u]))
+            const syncPromises = []
+            for (const member of data) {
+              const authUser = authMap[member.user_id]
+              if (!authUser) continue
+              const authAvatar = authUser.user_metadata?.avatar_url || null
+              const authName = authUser.user_metadata?.full_name || null
+              const updates = {}
+              if (authAvatar && member.avatar_url !== authAvatar) updates.avatar_url = authAvatar
+              if (authName && member.name !== authName) updates.name = authName
+              if (Object.keys(updates).length > 0) {
+                Object.assign(member, updates)
+                syncPromises.push(supabaseAdmin.from('org_members').update(updates).eq('id', member.id))
+              }
+            }
+            if (syncPromises.length > 0) await Promise.all(syncPromises)
+          }
+        } catch (e) {
+          console.warn('Avatar sync skipped:', e.message)
+        }
+      }
       dispatch({ type: 'SET_ORG_MEMBERS', payload: data })
     }
     return { data, error }
@@ -523,12 +552,28 @@ export function useSupabase() {
   }, [dispatch])
 
   const removeOrgMember = useCallback(async (memberId) => {
+    // Get member info before deleting (need email + org_id to clean up invite)
+    const { data: member } = await supabase
+      .from('org_members')
+      .select('email, org_id')
+      .eq('id', memberId)
+      .single()
+
     const { error } = await supabase
       .from('org_members')
       .delete()
       .eq('id', memberId)
     if (!error) {
       dispatch({ type: 'REMOVE_ORG_MEMBER', payload: memberId })
+      // Clean up org_invite so the user can be re-invited later
+      if (member?.email && member?.org_id) {
+        const client = supabaseAdmin || supabase
+        await client
+          .from('org_invites')
+          .delete()
+          .eq('email', member.email)
+          .eq('org_id', member.org_id)
+      }
     }
     return { error }
   }, [dispatch])
