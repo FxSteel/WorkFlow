@@ -27,6 +27,9 @@ dist-ssr
 # Security
 SECURITY_AUDIT.md
 
+# Claude Code config
+.claude/
+
 # MCP / Supabase Edge Functions (internal config)
 .mcp.json
 mcp/

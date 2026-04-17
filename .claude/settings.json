@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(find /Users/fer/Desktop/MondayProject -type f -name *.sql -o -name *supabase* -o -name *migration*)",
-      "mcp__claude_ai_Supabase__apply_migration"
-    ]
-  }
-}
