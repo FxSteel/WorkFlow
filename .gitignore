@@ -29,6 +29,8 @@ SECURITY_AUDIT.md
 
 # Claude Code config
 .claude/
+CLAUDE.md
+SUPER_ADMIN_INSTRUCTIONS.md
 
 # MCP / Supabase Edge Functions (internal config)
 .mcp.json
