@@ -67,6 +67,12 @@ export default function NotificationCenter() {
       .eq('read', true)
       .lt('created_at', tenDaysAgo)
 
+    // Get workspace IDs for the current org to filter notifications
+    const currentOrgId = state.currentOrg?.id
+    const orgWsIds = currentOrgId
+      ? state.workspaces.filter(ws => ws.org_id === currentOrgId).map(ws => ws.id)
+      : []
+
     const [notifResult, inviteResult] = await Promise.all([
       supabase
         .from('notifications')
@@ -76,7 +82,13 @@ export default function NotificationCenter() {
         .limit(50),
       fetchMyInvites(user.email),
     ])
-    if (notifResult.data) setNotifications(notifResult.data)
+    if (notifResult.data) {
+      // Only show notifications for the current org (by workspace) or global ones (no workspace)
+      const filtered = orgWsIds.length > 0
+        ? notifResult.data.filter(n => !n.workspace_id || orgWsIds.includes(n.workspace_id))
+        : notifResult.data
+      setNotifications(filtered)
+    }
     if (inviteResult?.data) setInvites(inviteResult.data)
     setLoading(false)
   }

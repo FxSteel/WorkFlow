@@ -82,8 +82,6 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
   const [editingType, setEditingType] = useState(null) // 'workspace' | 'board'
   const [editName, setEditName] = useState('')
   const [colorPicker, setColorPicker] = useState(null)
-  const [workspacesLoaded, setWorkspacesLoaded] = useState(false)
-  const [workspacesOrgId, setWorkspacesOrgId] = useState(null) // track which org's workspaces we loaded
   const [privateWs, setPrivateWs] = useState(null)
   const [privateExpanded, setPrivateExpanded] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
@@ -126,21 +124,11 @@ export default function Sidebar({ onOpenInviteModal, onOpenSearch }) {
       })
   ).filter(ws => !ws.is_private)
 
-  // Track when workspaces are available for the current org
-  useEffect(() => {
-    if (!state.currentOrg) return
-    const orgId = state.currentOrg.id
-    // If we switched orgs, reset loaded state
-    if (orgId !== workspacesOrgId) {
-      setWorkspacesLoaded(false)
-      setWorkspacesOrgId(orgId)
-      return
-    }
-    // Mark as loaded when workspaces exist for this org (or loading finished)
-    if (!workspacesLoaded && !state.loading) {
-      setWorkspacesLoaded(true)
-    }
-  }, [state.currentOrg?.id, state.workspaces, state.loading])
+  // Workspaces belong to current org if any workspace has matching org_id,
+  // or if the array is empty (org has no workspaces yet — still "loaded")
+  const currentOrgId = state.currentOrg?.id
+  const workspacesMatchOrg = state.workspaces.length === 0 || state.workspaces.some(ws => ws.org_id === currentOrgId)
+  const workspacesLoaded = !!(currentOrgId && workspacesMatchOrg)
 
   // Fetch notes for all visible workspaces when they load
   useEffect(() => {

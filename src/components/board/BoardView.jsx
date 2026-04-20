@@ -30,7 +30,8 @@ export default function BoardView() {
   const [collapsedSprints, setCollapsedSprints] = useState({})
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [addingToSprint, setAddingToSprint] = useState(null)
-  const [boardLoading, setBoardLoading] = useState(false)
+  const [boardLoading, setBoardLoading] = useState(true)
+  const lastLoadedBoardRef = useRef(null)
   const [filters, setFilters] = useState({ assignee: null, status: null, priority: null, hasDate: null })
 
   // Filter tasks
@@ -123,14 +124,19 @@ export default function BoardView() {
 
   useEffect(() => {
     if (state.currentBoard) {
-      setBoardLoading(true)
+      const boardId = state.currentBoard.id
+      const alreadyLoaded = lastLoadedBoardRef.current === boardId
+      if (!alreadyLoaded) setBoardLoading(true)
       Promise.all([
-        fetchTasks(state.currentBoard.id),
-        fetchSprints(state.currentBoard.id),
-        initDefaultStatuses(state.currentBoard.id).then(() => fetchBoardStatuses(state.currentBoard.id)),
-        fetchCustomFields(state.currentBoard.id),
-        fetchCustomFieldValues(state.currentBoard.id),
-      ]).finally(() => setBoardLoading(false))
+        fetchTasks(boardId),
+        fetchSprints(boardId),
+        initDefaultStatuses(boardId).then(() => fetchBoardStatuses(boardId)),
+        fetchCustomFields(boardId),
+        fetchCustomFieldValues(boardId),
+      ]).finally(() => {
+        lastLoadedBoardRef.current = boardId
+        setBoardLoading(false)
+      })
     }
     if (state.currentOrg) {
       fetchMembers(state.currentOrg.id)
@@ -166,7 +172,7 @@ export default function BoardView() {
     return <HomePage />
   }
 
-  if (boardLoading || state.loading) {
+  if (boardLoading) {
     return <BoardSkeleton />
   }
 

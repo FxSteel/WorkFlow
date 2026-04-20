@@ -9,13 +9,11 @@ export function useSupabase() {
   // --- Organizations ---
 
   const fetchOrganizations = useCallback(async () => {
-    dispatch({ type: 'SET_LOADING', payload: true })
     const { data, error } = await supabase
       .from('organizations')
       .select('*')
       .order('created_at', { ascending: true })
     if (!error && data) dispatch({ type: 'SET_ORGANIZATIONS', payload: data })
-    dispatch({ type: 'SET_LOADING', payload: false })
     return { data, error }
   }, [dispatch])
 
@@ -172,14 +170,12 @@ export function useSupabase() {
 
   const fetchWorkspaces = useCallback(async (orgId) => {
     if (!orgId) return { data: null, error: null }
-    dispatch({ type: 'SET_LOADING', payload: true })
     const { data, error } = await supabase
       .from('workspaces')
       .select('*')
       .eq('org_id', orgId)
       .order('created_at', { ascending: true })
     if (!error && data) dispatch({ type: 'SET_WORKSPACES', payload: data })
-    dispatch({ type: 'SET_LOADING', payload: false })
     return { data, error }
   }, [dispatch])
 
@@ -552,10 +548,10 @@ export function useSupabase() {
   }, [dispatch])
 
   const removeOrgMember = useCallback(async (memberId) => {
-    // Get member info before deleting (need email + org_id to clean up invite)
+    // Get member info before deleting (need user_id, email, org_id for cleanup)
     const { data: member } = await supabase
       .from('org_members')
-      .select('email, org_id')
+      .select('user_id, email, org_id')
       .eq('id', memberId)
       .single()
 
@@ -565,14 +561,34 @@ export function useSupabase() {
       .eq('id', memberId)
     if (!error) {
       dispatch({ type: 'REMOVE_ORG_MEMBER', payload: memberId })
-      // Clean up org_invite so the user can be re-invited later
-      if (member?.email && member?.org_id) {
+
+      if (member?.org_id) {
         const client = supabaseAdmin || supabase
-        await client
-          .from('org_invites')
-          .delete()
-          .eq('email', member.email)
-          .eq('org_id', member.org_id)
+
+        // Clean up org_invite so the user can be re-invited later
+        if (member.email) {
+          await client
+            .from('org_invites')
+            .delete()
+            .eq('email', member.email)
+            .eq('org_id', member.org_id)
+        }
+
+        // Clean up notifications linked to this org's workspaces
+        if (member.user_id) {
+          const { data: orgWorkspaces } = await supabase
+            .from('workspaces')
+            .select('id')
+            .eq('org_id', member.org_id)
+          const wsIds = (orgWorkspaces || []).map(w => w.id)
+          if (wsIds.length > 0) {
+            await supabase
+              .from('notifications')
+              .delete()
+              .eq('user_id', member.user_id)
+              .in('workspace_id', wsIds)
+          }
+        }
       }
     }
     return { error }

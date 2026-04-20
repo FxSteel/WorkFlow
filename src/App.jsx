@@ -23,7 +23,6 @@ import { Toaster } from 'sonner'
 import { usePresence } from './hooks/usePresence'
 import { useSubscription } from './hooks/useSubscription'
 import Paywall from './components/billing/Paywall'
-import AdminPanel from './components/admin/AdminPanel'
 import StatusConfigModal from './components/board/StatusConfigModal'
 import CustomFieldsConfigModal from './components/board/CustomFieldsConfigModal'
 import NotesPage from './components/private/NotesPage'
@@ -245,11 +244,6 @@ function AuthenticatedApp() {
 
   if (needsPassword) {
     return <SetupPassword />
-  }
-
-  // Secret admin panel — no link in the app
-  if (window.location.pathname === '/wf-admin-panel') {
-    return <AdminPanel />
   }
 
   return (
