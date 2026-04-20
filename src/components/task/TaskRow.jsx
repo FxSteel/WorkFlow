@@ -295,7 +295,10 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
               )
             })()
           ) : (
-            <span className="text-[11px] text-muted-foreground">Sin asignar</span>
+            <>
+              <div className="w-6 h-6 rounded-full border-2 border-dashed border-muted-foreground/30 shrink-0" />
+              <span className="text-[11px] text-muted-foreground">Sin asignar</span>
+            </>
           )}
         </button>
 
