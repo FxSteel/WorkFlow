@@ -417,7 +417,7 @@ function TableView({
 
   // Column order: reorderable via drag & drop
   const defaultColDefs = [
-    { key: 'assignee', label: 'Responsable', width: '150px' },
+    { key: 'assignee', label: 'Responsable', width: '180px' },
     { key: 'status', label: 'Estado', width: '120px' },
     { key: 'due_date', label: 'Fecha', width: '120px' },
     { key: 'priority', label: 'Prioridad', width: '100px' },

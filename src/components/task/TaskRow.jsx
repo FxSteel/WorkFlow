@@ -273,7 +273,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
         <button
           ref={assignee.triggerRef}
           onClick={() => { if (!can('editTask')) return; assignee.updatePos('left', 176); assignee.setOpen(!assignee.open) }}
-          className="flex items-center gap-1.5 hover:bg-accent rounded px-1.5 py-0.5 transition-colors w-full"
+          className="flex items-center gap-1.5 hover:bg-accent rounded px-1.5 py-0.5 transition-colors w-full min-w-0 overflow-hidden"
         >
           {task.assignee_name ? (
             (() => {
@@ -290,7 +290,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
                       {task.assignee_name[0]?.toUpperCase()}
                     </div>
                   )}
-                  <span className="text-xs whitespace-nowrap">{task.assignee_name}</span>
+                  <span className="text-xs truncate">{task.assignee_name.split(' ').slice(0, 2).join(' ')}</span>
                 </>
               )
             })()
