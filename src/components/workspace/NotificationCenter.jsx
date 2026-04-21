@@ -103,6 +103,11 @@ export default function NotificationCenter() {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })))
   }
 
+  const deleteNotification = async (id) => {
+    await supabase.from('notifications').delete().eq('id', id)
+    setNotifications(prev => prev.filter(n => n.id !== id))
+  }
+
   const handleAcceptInvite = async (invite) => {
     setLoadingId(invite.id)
     const userName = user.user_metadata?.full_name || user.email.split('@')[0]
@@ -316,17 +321,24 @@ export default function NotificationCenter() {
                           )}
                         </div>
                       </button>
-                      {!notif.read ? (
+                      <div className="flex flex-col items-center gap-0.5 shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {!notif.read && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); markAsRead(notif.id) }}
+                            className="p-1 rounded-md hover:bg-accent text-primary"
+                            title="Marcar como leída"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
-                          onClick={(e) => { e.stopPropagation(); markAsRead(notif.id) }}
-                          className="p-1 rounded-md hover:bg-accent text-primary shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                          title="Marcar como leída"
+                          onClick={(e) => { e.stopPropagation(); deleteNotification(notif.id) }}
+                          className="p-1 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                          title="Eliminar notificación"
                         >
-                          <Check className="w-3.5 h-3.5" />
+                          <X className="w-3.5 h-3.5" />
                         </button>
-                      ) : (
-                        <div className="w-6 shrink-0" />
-                      )}
+                      </div>
                     </div>
                   )
                 })}
