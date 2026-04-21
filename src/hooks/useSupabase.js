@@ -1,7 +1,10 @@
-import { useCallback, useRef } from 'react'
+import { useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { supabaseAdmin } from '../lib/supabase-admin'
 import { useApp } from '../context/AppContext'
+
+// Module-level lock for ensurePrivateWorkspace — shared across all hook instances
+const _privateWsLock = {}
 
 export function useSupabase() {
   const { dispatch } = useApp()
@@ -799,13 +802,13 @@ export function useSupabase() {
 
   // --- Private Workspace ---
 
-  const privateWsLock = useRef({})
   const ensurePrivateWorkspace = useCallback(async (orgId, userId) => {
     if (!orgId || !userId) return null
     // Prevent concurrent calls for the same org from creating duplicates
+    // Uses module-level lock so it works across all hook instances
     const lockKey = `${orgId}_${userId}`
-    if (privateWsLock.current[lockKey]) return privateWsLock.current[lockKey]
-    privateWsLock.current[lockKey] = (async () => {
+    if (_privateWsLock[lockKey]) return _privateWsLock[lockKey]
+    _privateWsLock[lockKey] = (async () => {
     // Check if private workspace already exists
     const { data: rows } = await supabase
       .from('workspaces')
@@ -887,7 +890,7 @@ export function useSupabase() {
     }
     return ws
     })()
-    try { return await privateWsLock.current[lockKey] } finally { delete privateWsLock.current[lockKey] }
+    try { return await _privateWsLock[lockKey] } finally { delete _privateWsLock[lockKey] }
   }, [])
 
   // --- User Notes ---
