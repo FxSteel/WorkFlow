@@ -26,7 +26,9 @@ export function useSubscription(userId) {
       const { data } = await supabase.rpc('check_org_has_access', { check_org_id: org.id })
       results[org.id] = !!data
     }
-    setOrgAccess(results)
+    // Merge with existing access instead of replacing, to avoid losing
+    // current org access state while checking new orgs
+    setOrgAccess(prev => ({ ...prev, ...results }))
     setLoading(false)
     return results
   }, [])

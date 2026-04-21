@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { supabaseAdmin } from '../lib/supabase-admin'
 import { useApp } from '../context/AppContext'
@@ -26,14 +26,18 @@ export function useSupabase() {
     if (!error && data) {
       dispatch({ type: 'ADD_ORGANIZATION', payload: data })
 
-      // Add owner as org_member
+      // Use admin client for org setup to bypass RLS (anon client fails because
+      // get_my_org_ids() doesn't return the new org until org_member exists)
+      const setupClient = supabaseAdmin || supabase
+
+      // Add owner as org_member (critical — workspace creation depends on this via RLS)
       if (org.owner_id) {
         const { data: userData } = await supabase.auth.getUser()
         const ownerName = userData?.user?.user_metadata?.full_name
           || userData?.user?.email?.split('@')[0]
           || 'Admin'
         const ownerEmail = userData?.user?.email || ''
-        await supabase
+        const { error: memberErr } = await setupClient
           .from('org_members')
           .insert({
             org_id: data.id,
@@ -44,18 +48,24 @@ export function useSupabase() {
             color: '#000000',
             avatar_url: userData?.user?.user_metadata?.avatar_url || null,
           })
+        if (memberErr) {
+          console.error('createOrganization: org_member insert failed:', memberErr.message)
+        }
       }
 
       // Create default workspace "General"
-      const { data: wsData } = await supabase
+      const { data: wsData, error: wsErr } = await setupClient
         .from('workspaces')
         .insert({ name: 'General', owner_id: org.owner_id, color: org.color || '#6c5ce7', org_id: data.id })
         .select()
         .single()
+      if (wsErr) {
+        console.error('createOrganization: workspace insert failed:', wsErr.message)
+      }
       if (wsData) {
         dispatch({ type: 'ADD_WORKSPACE', payload: wsData })
         // Create default board "Tareas" in the workspace
-        const { data: boardData } = await supabase
+        const { data: boardData } = await setupClient
           .from('boards')
           .insert({ name: 'Tareas', workspace_id: wsData.id })
           .select()
@@ -71,7 +81,7 @@ export function useSupabase() {
             { name: 'Completado', color: '#22c55e', position: 4, board_id: boardData.id },
             { name: 'Bloqueado', color: '#ef4444', position: 5, board_id: boardData.id },
           ]
-          await supabase.from('board_statuses').insert(defaultStatuses)
+          await setupClient.from('board_statuses').insert(defaultStatuses)
         }
       }
 
@@ -413,7 +423,9 @@ export function useSupabase() {
   }, [dispatch])
 
   const acceptInvite = useCallback(async (inviteId, orgId, userId, userName, userEmail, inviteRole, workspaceIds, customPermissions) => {
-    // Add user as org_member with role, workspace access and custom permissions from invite
+    // Use admin client to bypass RLS (invited user has no org_member row yet,
+    // so orgmem_insert policy rejects the insert with anon client)
+    const client = supabaseAdmin || supabase
     const memberData = {
       org_id: orgId,
       user_id: userId,
@@ -424,13 +436,16 @@ export function useSupabase() {
       color: ['#6c5ce7', '#00b894', '#0984e3', '#e17055', '#fdcb6e'][Math.floor(Math.random() * 5)],
     }
     if (customPermissions) memberData.custom_permissions = customPermissions
-    const { error: memberError } = await supabase
+    const { error: memberError } = await client
       .from('org_members')
       .insert(memberData)
-    if (memberError) return { error: memberError }
+    if (memberError) {
+      console.error('acceptInvite: org_member insert failed:', memberError.message)
+      return { error: memberError }
+    }
 
     // Update invite status
-    const { error: inviteError } = await supabase
+    const { error: inviteError } = await client
       .from('org_invites')
       .update({ status: 'accepted' })
       .eq('id', inviteId)
@@ -784,16 +799,21 @@ export function useSupabase() {
 
   // --- Private Workspace ---
 
+  const privateWsLock = useRef({})
   const ensurePrivateWorkspace = useCallback(async (orgId, userId) => {
     if (!orgId || !userId) return null
+    // Prevent concurrent calls for the same org from creating duplicates
+    const lockKey = `${orgId}_${userId}`
+    if (privateWsLock.current[lockKey]) return privateWsLock.current[lockKey]
+    privateWsLock.current[lockKey] = (async () => {
     // Check if private workspace already exists
-    const { data: existing } = await supabase
+    const { data: rows } = await supabase
       .from('workspaces')
       .select('*, boards(*)')
       .eq('org_id', orgId)
       .eq('is_private', true)
       .eq('owner_user_id', userId)
-      .single()
+    const existing = rows?.[0] || null
     if (existing) {
       const defaultStatuses = [
         { name: 'Backlog', color: '#6b7280', position: 0 },
@@ -829,11 +849,22 @@ export function useSupabase() {
     }
 
     // Create private workspace
-    const { data: ws } = await supabase
+    const { data: ws, error: wsErr } = await supabase
       .from('workspaces')
       .insert({ name: 'Privado', org_id: orgId, is_private: true, owner_user_id: userId, color: '#636e72' })
       .select()
       .single()
+    // If duplicate constraint error, fetch the existing one
+    if (wsErr) {
+      const { data: fallback } = await supabase
+        .from('workspaces')
+        .select('*, boards(*)')
+        .eq('org_id', orgId)
+        .eq('is_private', true)
+        .eq('owner_user_id', userId)
+        .limit(1)
+      return fallback?.[0] || null
+    }
     if (!ws) return null
 
     // Create default board
@@ -855,6 +886,8 @@ export function useSupabase() {
       ws.boards = [board]
     }
     return ws
+    })()
+    try { return await privateWsLock.current[lockKey] } finally { delete privateWsLock.current[lockKey] }
   }, [])
 
   // --- User Notes ---

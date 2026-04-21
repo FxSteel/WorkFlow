@@ -106,7 +106,12 @@ export default function NotificationCenter() {
   const handleAcceptInvite = async (invite) => {
     setLoadingId(invite.id)
     const userName = user.user_metadata?.full_name || user.email.split('@')[0]
-    await acceptInvite(invite.id, invite.org_id, user.id, userName, user.email, invite.role, invite.workspace_ids, invite.custom_permissions)
+    const { error } = await acceptInvite(invite.id, invite.org_id, user.id, userName, user.email, invite.role, invite.workspace_ids, invite.custom_permissions)
+    if (error) {
+      console.error('handleAcceptInvite failed:', error.message)
+      setLoadingId(null)
+      return
+    }
     notifyInviteAccepted({
       invitedByUserId: invite.invited_by,
       acceptedUserName: userName,
