@@ -85,8 +85,9 @@ export default function Topbar({ onNewTask, onNewSprint, onOpenSettings, onOpenP
     if (user?.id) {
       await supabase
         .from('org_members')
-        .update({ status })
+        .update({ status, last_active: new Date().toISOString() })
         .eq('user_id', user.id)
+      window.dispatchEvent(new Event('presence-changed'))
     }
   }, [user])
 
@@ -190,13 +191,14 @@ export default function Topbar({ onNewTask, onNewSprint, onOpenSettings, onOpenP
             }}
             className="flex items-center rounded-full hover:ring-2 hover:ring-accent transition-all"
           >
-            {userAvatar ? (
-              <img src={userAvatar} alt={userName} className="w-8 h-8 rounded-full object-cover" referrerPolicy="no-referrer" />
-            ) : (
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold text-white" style={{ backgroundColor: userColor }}>
-                {userName[0]?.toUpperCase()}
-              </div>
-            )}
+            <StatusAvatar
+              src={userAvatar}
+              name={userName}
+              size="sm"
+              status={userStatus}
+              showStatus={true}
+              bgColor={!userAvatar ? userColor : undefined}
+            />
           </button>
 
           {showUserMenu && (

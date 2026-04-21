@@ -15,18 +15,50 @@ export default function SearchModal({ isOpen, onClose }) {
   const [results, setResults] = useState({ workspaces: [], boards: [], tasks: [] })
   const [loading, setLoading] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [recentTasks, setRecentTasks] = useState([])
+  const [recentWorkspaces, setRecentWorkspaces] = useState([])
   const inputRef = useRef(null)
   const listRef = useRef(null)
 
-  // Focus input when opened
+  // Focus input and load recents when opened
   useEffect(() => {
     if (isOpen) {
       setQuery('')
       setResults({ workspaces: [], boards: [], tasks: [] })
       setSelectedIndex(0)
       setTimeout(() => inputRef.current?.focus(), 50)
+
+      // Load recent boards and tasks
+      const wsIds = state.workspaces.map(w => w.id)
+      if (wsIds.length > 0) {
+        supabase
+          .from('workspaces')
+          .select('*')
+          .in('id', wsIds)
+          .eq('is_private', false)
+          .order('created_at', { ascending: false })
+          .limit(5)
+          .then(({ data }) => { if (data) setRecentWorkspaces(data) })
+
+        supabase
+          .from('boards')
+          .select('id')
+          .in('workspace_id', wsIds)
+          .then(({ data: boards }) => {
+            const boardIds = (boards || []).map(b => b.id)
+            if (boardIds.length > 0) {
+              supabase
+                .from('tasks')
+                .select('*, boards(name, workspace_id, workspaces(name, color))')
+                .in('board_id', boardIds)
+                .order('updated_at', { ascending: false })
+                .limit(5)
+                .then(({ data }) => { if (data) setRecentTasks(data) })
+            }
+          })
+      }
     }
-  }, [isOpen])
+  }, [isOpen, state.workspaces])
 
   // Search with debounce
   useEffect(() => {
@@ -71,16 +103,22 @@ export default function SearchModal({ isOpen, onClose }) {
   }, [query])
 
   // Flatten results for keyboard nav
-  const allItems = [
-    ...results.workspaces.map(w => ({ type: 'workspace', data: w })),
-    ...results.boards.map(b => ({ type: 'board', data: b })),
-    ...results.tasks.map(t => ({ type: 'task', data: t })),
-  ]
+  const allItems = query.trim()
+    ? [
+        ...results.workspaces.map(w => ({ type: 'workspace', data: w })),
+        ...results.boards.map(b => ({ type: 'board', data: b })),
+        ...results.tasks.map(t => ({ type: 'task', data: t })),
+      ]
+    : [
+        ...recentTasks.map(t => ({ type: 'task', data: t })),
+        ...recentWorkspaces.map(w => ({ type: 'workspace', data: w })),
+      ]
 
   const handleSelect = useCallback((item) => {
     if (item.type === 'workspace') {
       dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: item.data })
-      dispatch({ type: 'SET_CURRENT_BOARD', payload: null })
+      const firstBoard = state.boards.find(b => b.workspace_id === item.data.id && !b.is_notes_board)
+      dispatch({ type: 'SET_CURRENT_BOARD', payload: firstBoard || null })
     } else if (item.type === 'board') {
       const ws = state.workspaces.find(w => w.id === item.data.workspace_id)
       if (ws) dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: ws })
@@ -272,7 +310,13 @@ export default function SearchModal({ isOpen, onClose }) {
           )}
 
           {!query.trim() && !loading && (
-            <EmptyState title="Buscar en WorkFlow" description="Busca tableros, tareas y espacios de trabajo." compact soft />
+            <RecentItems
+              recentWorkspaces={recentWorkspaces}
+              recentTasks={recentTasks}
+              selectedIndex={selectedIndex}
+              setSelectedIndex={setSelectedIndex}
+              handleSelect={handleSelect}
+            />
           )}
         </div>
 
@@ -293,6 +337,88 @@ export default function SearchModal({ isOpen, onClose }) {
         </div>
       </div>
     </div>
+  )
+}
+
+function RecentItems({ recentWorkspaces, recentTasks, selectedIndex, setSelectedIndex, handleSelect }) {
+  if (recentWorkspaces.length === 0 && recentTasks.length === 0) {
+    return <EmptyState title="Buscar en WorkFlow" description="Busca tableros, tareas y espacios de trabajo." compact soft />
+  }
+
+  let flatIndex = -1
+
+  return (
+    <>
+      {recentTasks.length > 0 && (
+        <div>
+          <div className="px-4 pt-3 pb-1">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Tareas recientes</span>
+          </div>
+          {recentTasks.map(task => {
+            flatIndex++
+            const idx = flatIndex
+            return (
+              <ResultItem
+                key={task.id}
+                data-index={idx}
+                selected={selectedIndex === idx}
+                onMouseEnter={() => setSelectedIndex(idx)}
+                onClick={() => handleSelect({ type: 'task', data: task })}
+                icon={
+                  <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center">
+                    <CheckSquare className="w-3.5 h-3.5 text-muted-foreground" />
+                  </div>
+                }
+                title={task.title}
+                subtitle={
+                  <span className="flex items-center gap-2">
+                    <span className={cn('w-1.5 h-1.5 rounded-full', STATUS_COLORS[task.status])} />
+                    <span>{task.status}</span>
+                    {task.boards?.name && (
+                      <>
+                        <span className="text-border">·</span>
+                        <span>{task.boards.name}</span>
+                      </>
+                    )}
+                  </span>
+                }
+              />
+            )
+          })}
+        </div>
+      )}
+
+      {recentWorkspaces.length > 0 && (
+        <div>
+          <div className="px-4 pt-3 pb-1">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Espacios de trabajo recientes</span>
+          </div>
+          {recentWorkspaces.map(ws => {
+            flatIndex++
+            const idx = flatIndex
+            return (
+              <ResultItem
+                key={ws.id}
+                data-index={idx}
+                selected={selectedIndex === idx}
+                onMouseEnter={() => setSelectedIndex(idx)}
+                onClick={() => handleSelect({ type: 'workspace', data: ws })}
+                icon={
+                  <div
+                    className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white"
+                    style={{ backgroundColor: ws.color || '#6c5ce7' }}
+                  >
+                    {ws.name?.[0]?.toUpperCase()}
+                  </div>
+                }
+                title={ws.name}
+                subtitle="Espacio de trabajo"
+              />
+            )
+          })}
+        </div>
+      )}
+    </>
   )
 }
 

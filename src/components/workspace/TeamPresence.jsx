@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
 
 const STATUS_ORDER = { online: 0, idle: 1, dnd: 2, invisible: 3 }
-const OFFLINE_THRESHOLD = 5 * 60 * 1000 // 5 min without heartbeat = offline
+const OFFLINE_THRESHOLD = 3 * 60 * 1000 // 3 min without heartbeat = offline
 
 const STATUS_INDICATOR = {
   online: { color: 'bg-emerald-500', label: 'En linea' },
@@ -30,7 +30,13 @@ export default function TeamPresence() {
     }
     fetchPresence()
     const interval = setInterval(fetchPresence, 15000)
-    return () => clearInterval(interval)
+    // Refresh immediately when status changes locally
+    const onPresenceChanged = () => fetchPresence()
+    window.addEventListener('presence-changed', onPresenceChanged)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('presence-changed', onPresenceChanged)
+    }
   }, [state.currentOrg?.id])
 
   const fetchPresence = async () => {
@@ -43,8 +49,6 @@ export default function TeamPresence() {
     if (data) setMembers(data)
   }
 
-  const now = Date.now()
-
   const getEffectiveStatus = (member) => {
     // Manual status (dnd) takes priority
     if (member.status === 'dnd') return 'dnd'
@@ -53,11 +57,12 @@ export default function TeamPresence() {
     // Check last_active to determine if truly online
     if (!member.last_active) return 'offline'
     const lastActive = new Date(member.last_active).getTime()
+    const now = Date.now()
     const elapsed = now - lastActive
 
     if (elapsed > OFFLINE_THRESHOLD) return 'offline'
     if (member.status === 'idle') return 'idle'
-    return 'online'
+    return member.status === 'online' ? 'online' : 'offline'
   }
 
   const onlineMembers = members
