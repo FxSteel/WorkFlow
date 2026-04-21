@@ -22,19 +22,25 @@ export default function CreateOrgScreen() {
 
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuario'
 
-  // Fetch pending/accepted invites that don't have an org_member yet
+  // Fetch pending/accepted invites
   useEffect(() => {
     if (!user?.email) return
+
     const fetchInvites = async () => {
+      // Wait for auth session to be fully established (critical on magic link redirect)
+      await supabase.auth.getSession()
+
       const client = supabaseAdmin || supabase
       const { data } = await client
         .from('org_invites')
         .select('*, organizations(name, color, icon_url)')
         .eq('email', user.email)
         .in('status', ['pending', 'accepted'])
+
       setInvites(data || [])
       setLoadingInvites(false)
     }
+
     fetchInvites()
   }, [user?.email])
 
@@ -68,7 +74,7 @@ export default function CreateOrgScreen() {
       await client.from('org_invites').update({ status: 'accepted' }).eq('id', invite.id)
     }
 
-    toast.success(`Te uniste a ${invite.organizations?.name || 'la organización'}`)
+    toast.success(`Te uniste a ${invite.org_name || invite.organizations?.name || 'la organización'}`)
     await fetchOrganizations()
     setJoiningId(null)
   }
@@ -132,16 +138,16 @@ export default function CreateOrgScreen() {
                   <div className="flex items-center gap-3">
                     <div
                       className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-lg overflow-hidden"
-                      style={{ backgroundColor: invite.organizations?.color || '#0a0a0a' }}
+                      style={{ backgroundColor: invite.org_color || invite.organizations?.color || '#0a0a0a' }}
                     >
-                      {invite.organizations?.icon_url ? (
-                        <img src={invite.organizations.icon_url} alt="" className="w-full h-full object-cover" />
+                      {(invite.org_icon_url || invite.organizations?.icon_url) ? (
+                        <img src={invite.org_icon_url || invite.organizations?.icon_url} alt="" className="w-full h-full object-cover" />
                       ) : (
-                        (invite.organizations?.name || '?')[0].toUpperCase()
+                        (invite.org_name || invite.organizations?.name || '?')[0].toUpperCase()
                       )}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-foreground">{invite.organizations?.name}</p>
+                      <p className="text-sm font-medium text-foreground">{invite.org_name || invite.organizations?.name}</p>
                       <p className="text-xs text-muted-foreground capitalize">Rol: {invite.role || 'member'}</p>
                     </div>
                   </div>

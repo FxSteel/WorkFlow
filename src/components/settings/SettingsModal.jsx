@@ -417,6 +417,7 @@ function MembersSettings() {
       org_id: org.id, email: inviteEmail, role, workspace_ids: wsIds,
       custom_permissions: customPermissions,
       invited_by: user.id, invited_by_name: user.user_metadata?.full_name || user.email, status: 'pending',
+      org_name: org.name, org_color: org.color, org_icon_url: org.icon_url || null,
     })
 
     if (inviteError) { setError(inviteError.message); setSending(false); return }
@@ -438,7 +439,7 @@ function MembersSettings() {
         } else {
           const { error: emailErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(inviteEmail, {
             redirectTo: window.location.origin,
-            data: { invited_to_org: org.name, invited_by: senderName },
+            data: { invited_to_org: org.name, invited_by: senderName, org_initial: (org.name || '?')[0].toUpperCase(), org_icon_url: org.icon_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(org.name || '?')}&background=0a0a0a&color=fff&size=80&font-size=0.45&bold=true&rounded=true&format=png` },
           })
           if (!emailErr) emailSent = true
           else console.error('Invite error:', emailErr)

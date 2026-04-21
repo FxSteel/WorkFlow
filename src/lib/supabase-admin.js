@@ -10,6 +10,7 @@ export const supabaseAdmin = serviceRoleKey
       auth: {
         autoRefreshToken: false,
         persistSession: false,
+        detectSessionInUrl: false,
       },
     })
   : null

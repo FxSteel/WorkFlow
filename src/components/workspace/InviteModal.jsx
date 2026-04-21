@@ -107,6 +107,9 @@ export default function InviteModal({ isOpen, onClose }) {
       invited_by: user.id,
       invited_by_name: user.user_metadata?.full_name || user.email,
       status: 'pending',
+      org_name: currentOrg.name,
+      org_color: currentOrg.color,
+      org_icon_url: currentOrg.icon_url || null,
     })
 
     if (inviteError) { setError(inviteError.message); setSending(false); return }
@@ -122,6 +125,8 @@ export default function InviteModal({ isOpen, onClose }) {
           invited_to_org: currentOrg.name,
           invited_by: senderName,
           invited_by_initials: senderInitials,
+          org_initial: (currentOrg.name || '?')[0].toUpperCase(),
+          org_icon_url: currentOrg.icon_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentOrg.name || '?')}&background=0a0a0a&color=fff&size=80&font-size=0.45&bold=true&rounded=true&format=png`,
         },
       })
 
@@ -129,9 +134,18 @@ export default function InviteModal({ isOpen, onClose }) {
         if (inviteEmailError.message?.includes('already been registered')) {
           try {
             await supabaseAdmin.auth.admin.generateLink({
-              type: 'magiclink',
+              type: 'invite',
               email: inviteEmail,
-              options: { redirectTo: window.location.origin },
+              options: {
+                redirectTo: window.location.origin,
+                data: {
+                  invited_to_org: currentOrg.name,
+                  invited_by: senderName,
+                  invited_by_initials: senderInitials,
+                  org_initial: (currentOrg.name || '?')[0].toUpperCase(),
+                  org_icon_url: currentOrg.icon_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentOrg.name || '?')}&background=0a0a0a&color=fff&size=80&font-size=0.45&bold=true&rounded=true&format=png`,
+                },
+              },
             })
           } catch {}
         }
