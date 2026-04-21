@@ -589,6 +589,7 @@ function TableView({
   }, [])
 
   const handleRenameSprint = async (sprintId) => {
+    if (!can('editSprint')) return
     if (editSprintName.trim()) {
       await updateSprint(sprintId, { name: editSprintName.trim() })
       toast.success('Sprint renombrado')
@@ -598,12 +599,14 @@ function TableView({
   }
 
   const handleDeleteSprint = async (sprintId) => {
+    if (!can('deleteSprint')) return
     await deleteSprint(sprintId)
     toast.success('Sprint eliminado')
     setDeleteSprintConfirm(null)
   }
 
   const handleSprintDateChange = async (sprintId, field, value) => {
+    if (!can('editSprint')) return
     await updateSprint(sprintId, { [field]: value || null })
   }
 

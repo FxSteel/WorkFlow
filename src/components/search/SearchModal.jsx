@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   Search, LayoutDashboard, CheckSquare, Folder,
   ArrowRight, Command, CornerDownLeft,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { useAuth } from '../../context/AuthContext'
+import { usePermissions } from '../../hooks/usePermissions'
 import EmptyState from '../ui/EmptyState'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
@@ -11,6 +13,8 @@ import { PRIORITY_CONFIG, STATUS_COLORS } from '../../lib/constants'
 
 export default function SearchModal({ isOpen, onClose }) {
   const { state, dispatch, openTask } = useApp()
+  const { user } = useAuth()
+  const { role } = usePermissions()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState({ workspaces: [], boards: [], tasks: [] })
   const [loading, setLoading] = useState(false)
@@ -20,6 +24,19 @@ export default function SearchModal({ isOpen, onClose }) {
   const inputRef = useRef(null)
   const listRef = useRef(null)
 
+  // Compute accessible workspace IDs (same logic as Sidebar)
+  const accessibleWsIds = useMemo(() => {
+    if (role === 'owner' || role === 'admin') {
+      return state.workspaces.filter(ws => !ws.is_private).map(ws => ws.id)
+    }
+    const currentOrgMember = state.orgMembers.find(m => m.user_id === user?.id)
+    const memberWsIds = currentOrgMember?.workspace_ids || []
+    if (memberWsIds.length === 0) return []
+    return state.workspaces
+      .filter(ws => !ws.is_private && memberWsIds.includes(ws.id))
+      .map(ws => ws.id)
+  }, [state.workspaces, state.orgMembers, user?.id, role])
+
   // Focus input and load recents when opened
   useEffect(() => {
     if (isOpen) {
@@ -28,13 +45,12 @@ export default function SearchModal({ isOpen, onClose }) {
       setSelectedIndex(0)
       setTimeout(() => inputRef.current?.focus(), 50)
 
-      // Load recent boards and tasks
-      const wsIds = state.workspaces.map(w => w.id)
-      if (wsIds.length > 0) {
+      // Load recent workspaces and tasks filtered by access
+      if (accessibleWsIds.length > 0) {
         supabase
           .from('workspaces')
           .select('*')
-          .in('id', wsIds)
+          .in('id', accessibleWsIds)
           .eq('is_private', false)
           .order('created_at', { ascending: false })
           .limit(5)
@@ -43,7 +59,7 @@ export default function SearchModal({ isOpen, onClose }) {
         supabase
           .from('boards')
           .select('id')
-          .in('workspace_id', wsIds)
+          .in('workspace_id', accessibleWsIds)
           .then(({ data: boards }) => {
             const boardIds = (boards || []).map(b => b.id)
             if (boardIds.length > 0) {
@@ -56,9 +72,12 @@ export default function SearchModal({ isOpen, onClose }) {
                 .then(({ data }) => { if (data) setRecentTasks(data) })
             }
           })
+      } else {
+        setRecentWorkspaces([])
+        setRecentTasks([])
       }
     }
-  }, [isOpen, state.workspaces])
+  }, [isOpen, accessibleWsIds])
 
   // Search with debounce
   useEffect(() => {
@@ -72,22 +91,42 @@ export default function SearchModal({ isOpen, onClose }) {
       setLoading(true)
       const searchTerm = `%${query.trim()}%`
 
+      if (accessibleWsIds.length === 0) {
+        setResults({ workspaces: [], boards: [], tasks: [] })
+        setSelectedIndex(0)
+        setLoading(false)
+        return
+      }
+
+      // First get board IDs in accessible workspaces for task filtering
+      const { data: accessibleBoards } = await supabase
+        .from('boards')
+        .select('id')
+        .in('workspace_id', accessibleWsIds)
+
+      const accessibleBoardIds = (accessibleBoards || []).map(b => b.id)
+
       const [wsRes, boardRes, taskRes] = await Promise.all([
         supabase
           .from('workspaces')
           .select('*')
+          .in('id', accessibleWsIds)
           .ilike('name', searchTerm)
           .limit(5),
         supabase
           .from('boards')
           .select('*, workspaces(name, color)')
+          .in('workspace_id', accessibleWsIds)
           .ilike('name', searchTerm)
           .limit(5),
-        supabase
-          .from('tasks')
-          .select('*, boards(name, workspace_id, workspaces(name, color))')
-          .ilike('title', searchTerm)
-          .limit(8),
+        accessibleBoardIds.length > 0
+          ? supabase
+              .from('tasks')
+              .select('*, boards(name, workspace_id, workspaces(name, color))')
+              .in('board_id', accessibleBoardIds)
+              .ilike('title', searchTerm)
+              .limit(8)
+          : Promise.resolve({ data: [] }),
       ])
 
       setResults({
@@ -115,16 +154,22 @@ export default function SearchModal({ isOpen, onClose }) {
       ]
 
   const handleSelect = useCallback((item) => {
+    // Guard: prevent navigating to inaccessible workspaces
+    const checkAccess = (wsId) => accessibleWsIds.includes(wsId)
+
     if (item.type === 'workspace') {
+      if (!checkAccess(item.data.id)) return
       dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: item.data })
       const firstBoard = state.boards.find(b => b.workspace_id === item.data.id && !b.is_notes_board)
       dispatch({ type: 'SET_CURRENT_BOARD', payload: firstBoard || null })
     } else if (item.type === 'board') {
+      if (!checkAccess(item.data.workspace_id)) return
       const ws = state.workspaces.find(w => w.id === item.data.workspace_id)
       if (ws) dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: ws })
       dispatch({ type: 'SET_CURRENT_BOARD', payload: item.data })
     } else if (item.type === 'task') {
       const wsId = item.data.boards?.workspace_id
+      if (wsId && !checkAccess(wsId)) return
       const ws = state.workspaces.find(w => w.id === wsId)
       if (ws) dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: ws })
       if (item.data.boards) {
@@ -133,7 +178,7 @@ export default function SearchModal({ isOpen, onClose }) {
       openTask(item.data)
     }
     onClose()
-  }, [dispatch, state.workspaces, openTask, onClose])
+  }, [dispatch, state.workspaces, accessibleWsIds, openTask, onClose])
 
   // Keyboard navigation
   const handleKeyDown = (e) => {

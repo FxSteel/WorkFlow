@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
+import { usePermissions } from '../../hooks/usePermissions'
 import { cn } from '../../lib/utils'
 import { PRIORITY_CONFIG } from '../../lib/constants'
 import EmptyState from '../ui/EmptyState'
@@ -10,6 +11,7 @@ import EmptyState from '../ui/EmptyState'
 export default function KanbanView({ isColVisible = () => true, filteredTasks }) {
   const { state, dispatch, openTask } = useApp()
   const { user } = useAuth()
+  const { can } = usePermissions()
   const tasks = filteredTasks || tasks
   const { updateTask, createTask, logTaskActivity } = useSupabase()
   const [addingTo, setAddingTo] = useState(null)
@@ -181,8 +183,8 @@ export default function KanbanView({ isColVisible = () => true, filteredTasks })
                         <div className="h-1 bg-primary/50 rounded-full mx-1 mb-1 animate-pulse" />
                       )}
                     <div
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, task)}
+                      draggable={can('moveTask')}
+                      onDragStart={(e) => { if (!can('moveTask')) { e.preventDefault(); return }; handleDragStart(e, task) }}
                       onDragEnd={handleDragEnd}
                       onDragOver={(e) => handleCardDragOver(e, index, col.name)}
                       onClick={() => openTask(task)}
@@ -279,7 +281,7 @@ export default function KanbanView({ isColVisible = () => true, filteredTasks })
                 )}
 
                 {/* Quick add */}
-                {addingTo === col.name ? (
+                {can('createTask') && addingTo === col.name ? (
                   <div className="bg-card border border-border rounded-lg p-2">
                     <input
                       autoFocus
@@ -294,7 +296,7 @@ export default function KanbanView({ isColVisible = () => true, filteredTasks })
                       className="w-full px-2 py-1 text-sm bg-transparent text-foreground focus:outline-none placeholder:text-muted-foreground"
                     />
                   </div>
-                ) : (
+                ) : can('createTask') ? (
                   <button
                     onClick={() => setAddingTo(col.name)}
                     className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded-lg transition-colors"
@@ -302,7 +304,7 @@ export default function KanbanView({ isColVisible = () => true, filteredTasks })
                     <Plus className="w-3.5 h-3.5" />
                     Agregar tarea
                   </button>
-                )}
+                ) : null}
               </div>
             </div>
           )

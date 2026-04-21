@@ -3,12 +3,17 @@ import { Plus, CheckCircle2, Circle, Trash2, GripVertical, User } from 'lucide-r
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
+import { usePermissions } from '../../hooks/usePermissions'
 import { cn } from '../../lib/utils'
 import { toast } from 'sonner'
 
 export default function TaskSubtasks({ taskId, boardId, onActivity }) {
   const { state, openTask } = useApp()
   const { user } = useAuth()
+  const { can } = usePermissions()
+  const canEdit = can('editTask')
+  const canCreate = can('createTask')
+  const canDelete = can('deleteTask')
   const { fetchSubtasks, createSubtask, updateSubtask, deleteSubtask } = useSupabase()
   const [subtasks, setSubtasks] = useState([])
   const [loading, setLoading] = useState(true)
@@ -29,7 +34,7 @@ export default function TaskSubtasks({ taskId, boardId, onActivity }) {
   const progress = subtasks.length > 0 ? Math.round((completedCount / subtasks.length) * 100) : 0
 
   const handleCreate = async () => {
-    if (!newTitle.trim()) return
+    if (!newTitle.trim() || !canCreate) return
     const { data, error } = await createSubtask({
       title: newTitle.trim(),
       status: 'Backlog',
@@ -50,6 +55,7 @@ export default function TaskSubtasks({ taskId, boardId, onActivity }) {
   }
 
   const toggleComplete = async (sub) => {
+    if (!canEdit) return
     const isCompleting = sub.status !== 'Completado'
     const newStatus = isCompleting ? 'Completado' : 'Backlog'
     const { data } = await updateSubtask(sub.id, { status: newStatus })
@@ -62,6 +68,7 @@ export default function TaskSubtasks({ taskId, boardId, onActivity }) {
   }
 
   const handleDelete = async (sub) => {
+    if (!canDelete) return
     await deleteSubtask(sub.id)
     setSubtasks(prev => prev.filter(s => s.id !== sub.id))
     onActivity?.('subtask_deleted', null, sub.title)
@@ -89,7 +96,7 @@ export default function TaskSubtasks({ taskId, boardId, onActivity }) {
             </span>
           )}
         </div>
-        {!adding && (
+        {!adding && canCreate && (
           <button
             onClick={() => setAdding(true)}
             className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
@@ -154,13 +161,15 @@ export default function TaskSubtasks({ taskId, boardId, onActivity }) {
                 )
               )}
 
-              <button
-                onClick={() => handleDelete(sub)}
-                className="p-0.5 rounded text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                title="Eliminar"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
+              {canDelete && (
+                <button
+                  onClick={() => handleDelete(sub)}
+                  className="p-0.5 rounded text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                  title="Eliminar"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
             </div>
           )
         })}

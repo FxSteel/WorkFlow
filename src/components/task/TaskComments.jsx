@@ -180,6 +180,7 @@ export default function TaskComments({ taskId }) {
     })
 
     if (error) {
+      console.error('Comment insert error:', error.message, error.code)
       toast.error('Error al publicar comentario')
     }
 
@@ -341,7 +342,7 @@ export default function TaskComments({ taskId }) {
       )}
 
       {/* Comment input */}
-      <div className="flex items-start gap-2.5">
+      {canComment && <div className="flex items-start gap-2.5">
         {userAvatar ? (
           <img src={userAvatar} alt="" className="w-7 h-7 rounded-full object-cover shrink-0 mt-1" referrerPolicy="no-referrer" />
         ) : (
@@ -466,7 +467,7 @@ export default function TaskComments({ taskId }) {
             </button>
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   )
 }

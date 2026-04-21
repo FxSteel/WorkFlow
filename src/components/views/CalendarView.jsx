@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
+import { usePermissions } from '../../hooks/usePermissions'
 import { cn } from '../../lib/utils'
 import { STATUS_COLORS } from '../../lib/constants'
 import { toast } from 'sonner'
@@ -15,6 +16,7 @@ export default function CalendarView({ filteredTasks }) {
   const { user } = useAuth()
   const tasks = filteredTasks || tasks
   const { updateTask, logTaskActivity } = useSupabase()
+  const { can } = usePermissions()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [draggedTask, setDraggedTask] = useState(null)
   const [dragOverDate, setDragOverDate] = useState(null)
@@ -206,8 +208,8 @@ export default function CalendarView({ filteredTasks }) {
                 {tasks.slice(0, 3).map(task => (
                   <button
                     key={task.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, task)}
+                    draggable={can('moveTask')}
+                    onDragStart={(e) => { if (!can('moveTask')) { e.preventDefault(); return }; handleDragStart(e, task) }}
                     onDragEnd={handleDragEnd}
                     onClick={() => openTask(task)}
                     className={cn(

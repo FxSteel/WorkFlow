@@ -154,6 +154,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
   }
 
   const handleSprintChange = async (sprintId) => {
+    if (!can('editTask')) return
     const oldSprint = sprintName
     await updateTask(task.id, { sprint_id: sprintId })
     const newSprint = state.sprints.find(s => s.id === sprintId)?.name || null
@@ -163,6 +164,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
   }
 
   const handleStatusChange = async (s) => {
+    if (!can('editTask')) return
     await updateTask(task.id, { status: s })
     logAct('status_changed', task.status, s)
     toast.success('Estado actualizado')
@@ -182,6 +184,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
   }
 
   const handlePriorityChange = async (p) => {
+    if (!can('editTask')) return
     await updateTask(task.id, { priority: p })
     logAct('priority_changed', task.priority, p)
     toast.success('Prioridad actualizada')
@@ -195,6 +198,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
   }
 
   const handleAssigneeChange = async (memberId, memberName) => {
+    if (!can('editTask')) return
     await updateTask(task.id, { assignee_id: memberId, assignee_name: memberName })
     logAct('assignee_changed', task.assignee_name || null, memberName || null)
     toast.success(memberId ? `Asignado a ${memberName}` : 'Responsable removido')
@@ -206,6 +210,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
   }
 
   const handleDuplicate = async () => {
+    if (!can('createTask')) return
     await createTask({
       title: `${task.title} (copia)`,
       description: task.description,
@@ -231,6 +236,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
   }
 
   const confirmDelete = async () => {
+    if (!can('deleteTask')) return
     await deleteTask(task.id)
     toast.success('Tarea eliminada')
     setShowDeleteConfirm(false)
@@ -385,10 +391,11 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
       <div style={{ order: colOrder['due_date'] ?? 3 }} className={`py-1.5 flex items-center justify-center ${isColVisible('due_date') ? 'px-3' : 'overflow-hidden w-0 p-0'}`}>
         <DatePicker
           value={task.due_date || ''}
-          onChange={(val) => updateTask(task.id, { due_date: val || null })}
+          onChange={(val) => { if (!can('editTask')) return; updateTask(task.id, { due_date: val || null }) }}
           placeholder="Sin fecha"
           size="sm"
           className="border-0 bg-transparent hover:bg-accent text-xs justify-center"
+          disabled={!can('editTask')}
         />
       </div>
 
@@ -526,6 +533,7 @@ export default function TaskRow({ task, onDragStart, onDragEnd, onDragOver, isDr
             <input
               type={cf.type === 'number' || cf.type === 'price' ? 'number' : 'text'}
               defaultValue={displayValue}
+              readOnly={!can('editTask')}
               onBlur={async (e) => {
                 if (!can('editTask')) return
                 const val = e.target.value

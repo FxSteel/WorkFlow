@@ -12,6 +12,7 @@ export default function DatePicker({
   placeholder = "Seleccionar fecha",
   className,
   size = "md",
+  disabled = false,
 }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, left: 0 })
@@ -74,7 +75,8 @@ export default function DatePicker({
       <div className="relative" ref={triggerRef}>
         <button
           type="button"
-          onClick={() => setOpen(!open)}
+          disabled={disabled}
+          onClick={() => { if (!disabled) setOpen(!open) }}
           className={cn(
             "inline-flex items-center rounded-lg border border-input bg-background text-foreground hover:bg-accent transition-colors w-full",
             !isValidDate && "text-muted-foreground",

@@ -139,6 +139,7 @@ export default function TaskSidePanel() {
   }
 
   const handleDelete = async () => {
+    if (!canDelete) return
     setShowDeleteConfirm(false)
     setClosing(true)
     setTimeout(async () => {
@@ -232,6 +233,7 @@ export default function TaskSidePanel() {
         <textarea
           value={title}
           onChange={(e) => {
+            if (!canEdit && !isNew) return
             setTitle(e.target.value)
             e.target.style.height = 'auto'
             e.target.style.height = e.target.scrollHeight + 'px'
@@ -240,6 +242,7 @@ export default function TaskSidePanel() {
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) e.target.blur() }}
           placeholder="Sin título"
           rows={1}
+          readOnly={!canEdit && !isNew}
           ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' } }}
           className="w-full text-2xl font-bold bg-transparent text-foreground border-0 focus:outline-none placeholder:text-muted-foreground/40 mb-5 resize-none overflow-hidden leading-tight"
         />
@@ -264,6 +267,7 @@ export default function TaskSidePanel() {
           <PropRow icon={User} label="Responsable">
             <Select
               value={task.assignee_id || '_none'}
+              disabled={!canEdit && !isNew}
               onValueChange={(val) => {
                 const member = assignableUsers.find(u => u.id === val)
                 const oldName = assignee?.name || null
@@ -309,6 +313,7 @@ export default function TaskSidePanel() {
           <PropRow icon={Tag} label="Estado">
             <Select
               value={task.status || (state.boardStatuses?.[0]?.name || 'Backlog')}
+              disabled={!canEdit && !isNew}
               onValueChange={(val) => {
                 handleFieldUpdate({ status: val })
                 logActivity('status_changed', task.status, val)
@@ -354,6 +359,7 @@ export default function TaskSidePanel() {
               placeholder="Vacío"
               size="sm"
               className="border-0 bg-transparent hover:bg-accent"
+              disabled={!canEdit && !isNew}
             />
           </PropRow>
 
@@ -361,6 +367,7 @@ export default function TaskSidePanel() {
           <PropRow icon={Flag} label="Prioridad">
             <Select
               value={task.priority || 'medium'}
+              disabled={!canEdit && !isNew}
               onValueChange={(val) => {
                 handleFieldUpdate({ priority: val })
                 logActivity('priority_changed', task.priority, val)
@@ -392,6 +399,7 @@ export default function TaskSidePanel() {
           <PropRow icon={Layers} label="Sprint">
             <Select
               value={task.sprint_id || '_none'}
+              disabled={!canEdit && !isNew}
               onValueChange={(val) => {
                 handleFieldUpdate({ sprint_id: val === '_none' ? null : val })
                 const oldSprint = sprint?.name || null
@@ -416,6 +424,7 @@ export default function TaskSidePanel() {
             <TagsInput
               value={task.tags || ''}
               onChange={(val) => handleFieldUpdate({ tags: val })}
+              disabled={!canEdit && !isNew}
             />
           </PropRow>
 
@@ -436,6 +445,7 @@ export default function TaskSidePanel() {
                   <Select
                     key={`${cf.id}-${currentVal || 'none'}`}
                     value={currentVal || '_none'}
+                    disabled={!canEdit && !isNew}
                     onValueChange={async (val) => {
                       const v = val === '_none' ? null : val
                       if (isNew) { savePendingCF(cf.id, 'dropdown', v); return }
@@ -468,6 +478,7 @@ export default function TaskSidePanel() {
                 <PropRow key={cf.id} icon={CFIcon} label={cf.name}>
                   <DatePicker
                     value={dateVal || ''}
+                    disabled={!canEdit && !isNew}
                     onChange={async (val) => {
                       if (isNew) { savePendingCF(cf.id, 'date', val || null); return }
                       await setCustomFieldValue(task.id, cf.id, 'date', val || null)
@@ -494,6 +505,7 @@ export default function TaskSidePanel() {
                   type={cf.type}
                   defaultValue={displayValue}
                   hasValue={hasValue}
+                  disabled={!canEdit && !isNew}
                   onSave={async (val) => {
                     const v = cf.type === 'number' || cf.type === 'price' ? (val ? Number(val) : null) : (val || null)
                     if (isNew) { savePendingCF(cf.id, cf.type, v); return }
@@ -520,7 +532,9 @@ export default function TaskSidePanel() {
           <h4 className="text-lg font-semibold text-foreground mb-3">Descripción de la tarea</h4>
           <BlockEditor
             value={task.description || ''}
+            contentKey={task.id || 'new'}
             onChange={(val) => {
+              if (!canEdit && !isNew) return
               setDescription(val)
               if (!isNew && task.id) {
                 showSaving()
@@ -528,6 +542,7 @@ export default function TaskSidePanel() {
               }
             }}
             placeholder="Proporciona un resumen general de la tarea..."
+            editable={canEdit || isNew}
           />
         </div>
 
@@ -609,7 +624,7 @@ export default function TaskSidePanel() {
   )
 }
 
-function CustomFieldInput({ type, defaultValue, hasValue, onSave }) {
+function CustomFieldInput({ type, defaultValue, hasValue, onSave, disabled }) {
   const [editing, setEditing] = useState(false)
   const [val, setVal] = useState(defaultValue)
 
@@ -618,8 +633,8 @@ function CustomFieldInput({ type, defaultValue, hasValue, onSave }) {
   if (!editing && !hasValue) {
     return (
       <button
-        onClick={() => setEditing(true)}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors px-1"
+        onClick={() => !disabled && setEditing(true)}
+        className={cn("flex items-center gap-1.5 text-sm text-muted-foreground transition-colors px-1", !disabled && "hover:text-foreground cursor-pointer")}
       >
         <Type className="w-3.5 h-3.5" />
         Vacío
@@ -630,8 +645,8 @@ function CustomFieldInput({ type, defaultValue, hasValue, onSave }) {
   if (!editing) {
     return (
       <button
-        onClick={() => setEditing(true)}
-        className="text-sm text-foreground hover:bg-accent/30 rounded px-1 transition-colors"
+        onClick={() => !disabled && setEditing(true)}
+        className={cn("text-sm text-foreground rounded px-1 transition-colors", !disabled && "hover:bg-accent/30 cursor-pointer")}
       >
         {type === 'price' ? `$${defaultValue}` : defaultValue}
       </button>
@@ -658,7 +673,7 @@ function CustomFieldInput({ type, defaultValue, hasValue, onSave }) {
   )
 }
 
-function TagsInput({ value, onChange }) {
+function TagsInput({ value, onChange, disabled }) {
   const [input, setInput] = useState('')
   const tags = value ? value.split(',').map(t => t.trim()).filter(Boolean) : []
 
@@ -680,21 +695,25 @@ function TagsInput({ value, onChange }) {
       {tags.map((tag, i) => (
         <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium">
           {tag}
-          <button onClick={() => removeTag(i)} className="hover:text-destructive transition-colors">
-            <X className="w-2.5 h-2.5" />
-          </button>
+          {!disabled && (
+            <button onClick={() => removeTag(i)} className="hover:text-destructive transition-colors">
+              <X className="w-2.5 h-2.5" />
+            </button>
+          )}
         </span>
       ))}
-      <input
-        value={input}
-        onChange={e => setInput(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') { e.preventDefault(); addTag() }
-          if (e.key === 'Backspace' && !input && tags.length > 0) removeTag(tags.length - 1)
-        }}
-        placeholder={tags.length === 0 ? 'Agregar etiqueta...' : '+'}
-        className="text-xs bg-transparent text-foreground focus:outline-none placeholder:text-muted-foreground/50 min-w-[60px] flex-1 px-1 py-0.5"
-      />
+      {!disabled && (
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); addTag() }
+            if (e.key === 'Backspace' && !input && tags.length > 0) removeTag(tags.length - 1)
+          }}
+          placeholder={tags.length === 0 ? 'Agregar etiqueta...' : '+'}
+          className="text-xs bg-transparent text-foreground focus:outline-none placeholder:text-muted-foreground/50 min-w-[60px] flex-1 px-1 py-0.5"
+        />
+      )}
     </div>
   )
 }

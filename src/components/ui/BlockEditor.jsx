@@ -1469,7 +1469,8 @@ export function FixedToolbar({ editor, onInsertImage, onOpenSlashMenu }) {
   )
 }
 
-export default function BlockEditor({ value, onChange, placeholder, showFixedToolbar = false, onEditorReady, toolbarContainerRef }) {
+export default function BlockEditor({ value, onChange, placeholder, showFixedToolbar = false, onEditorReady, toolbarContainerRef, editable = true, contentKey }) {
+  const initializedForKey = useRef(null)
   const [slashMenu, setSlashMenu] = useState(null)
   const [slashFilter, setSlashFilter] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -1557,6 +1558,7 @@ export default function BlockEditor({ value, onChange, placeholder, showFixedToo
       ToggleBlock,
     ],
     content: getInitialContent(),
+    editable,
     editorProps: {
       attributes: {
         class: 'outline-none min-h-[60px] notion-editor-content',
@@ -1613,6 +1615,27 @@ export default function BlockEditor({ value, onChange, placeholder, showFixedToo
       onChange?.(e.getHTML())
     },
   })
+
+  // Sync editable prop
+  useEffect(() => {
+    if (editor && editor.isEditable !== editable) editor.setEditable(editable)
+  }, [editor, editable])
+
+  // Sync content when contentKey changes (e.g. switching between tasks)
+  useEffect(() => {
+    if (!editor || contentKey === undefined) return
+    if (initializedForKey.current === contentKey) return
+    initializedForKey.current = contentKey
+    // Re-set content from value prop
+    let newContent = value || ''
+    try {
+      const parsed = JSON.parse(newContent)
+      if (Array.isArray(parsed) && parsed[0]?.type) {
+        newContent = blocksToHtml(parsed)
+      }
+    } catch {}
+    editor.commands.setContent(newContent, false)
+  }, [editor, contentKey])
 
   // Notify parent when editor is ready (optional)
   useEffect(() => {

@@ -9,6 +9,8 @@ import { useSupabase } from '../../hooks/useSupabase'
 import DatePicker from '../ui/DatePicker'
 import BlockEditor from '../ui/BlockEditor'
 import TaskComments from './TaskComments'
+import TaskSubtasks from './TaskSubtasks'
+import TaskActivity from './TaskActivity'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select'
 import { cn } from '../../lib/utils'
 import { STATUS_OPTIONS, STATUS_COLORS, PRIORITY_OPTIONS } from '../../lib/constants'
@@ -174,6 +176,7 @@ export default function TaskFullPage() {
             onChange={(e) => handleChange('title', e.target.value)}
             onBlur={handleTitleBlur}
             placeholder="Sin título"
+            readOnly={!canEdit && !isNew}
             className="w-full text-4xl font-bold bg-transparent text-foreground border-0 focus:outline-none placeholder:text-muted-foreground/40 mb-6"
           />
 
@@ -195,6 +198,7 @@ export default function TaskFullPage() {
                   )}
                   <Select
                     value={form.assignee_id || '_none'}
+                    disabled={!canEdit && !isNew}
                     onValueChange={(val) => {
                       const member = assignableUsers.find(u => u.id === val)
                       handleFieldSave('assignee_id', val === '_none' ? null : val)
@@ -221,6 +225,7 @@ export default function TaskFullPage() {
               ) : (
                 <Select
                   value="_none"
+                  disabled={!canEdit && !isNew}
                   onValueChange={(val) => {
                     const member = assignableUsers.find(u => u.id === val)
                     handleFieldSave('assignee_id', val === '_none' ? null : val)
@@ -252,7 +257,9 @@ export default function TaskFullPage() {
                 {(state.boardStatuses || []).map(s => (
                   <button
                     key={s.id}
+                    disabled={!canEdit && !isNew}
                     onClick={() => {
+                      if (!canEdit && !isNew) return
                       handleChange('status', s.name)
                       if (!isNew && sourceTask?.id) updateTask(sourceTask.id, { status: s.name })
                     }}
@@ -278,6 +285,7 @@ export default function TaskFullPage() {
                 placeholder="Sin fecha"
                 size="sm"
                 className="border-0 bg-transparent hover:bg-accent"
+                disabled={!canEdit && !isNew}
               />
             </PropertyRow>
 
@@ -285,6 +293,7 @@ export default function TaskFullPage() {
             <PropertyRow icon={Flag} label="Prioridad">
               <Select
                 value={form.priority}
+                disabled={!canEdit && !isNew}
                 onValueChange={(val) => handleFieldSave('priority', val)}
               >
                 <SelectTrigger className="border-0 bg-transparent h-7 px-1 text-sm hover:bg-accent w-auto">
@@ -307,6 +316,7 @@ export default function TaskFullPage() {
             <PropertyRow icon={Layers} label="Sprint">
               <Select
                 value={form.sprint_id || '_none'}
+                disabled={!canEdit && !isNew}
                 onValueChange={(val) => handleFieldSave('sprint_id', val === '_none' ? null : val)}
               >
                 <SelectTrigger className="border-0 bg-transparent h-7 px-1 text-sm hover:bg-accent w-auto">
@@ -326,8 +336,9 @@ export default function TaskFullPage() {
               <input
                 value={form.tags}
                 onChange={(e) => handleChange('tags', e.target.value)}
-                onBlur={() => { if (!isNew && sourceTask?.id) updateTask(sourceTask.id, { tags: form.tags }) }}
+                onBlur={() => { if (!isNew && sourceTask?.id && canEdit) updateTask(sourceTask.id, { tags: form.tags }) }}
                 placeholder="frontend, bug, urgente..."
+                readOnly={!canEdit && !isNew}
                 className="text-sm bg-transparent text-foreground focus:outline-none placeholder:text-muted-foreground/50 flex-1"
               />
             </PropertyRow>
@@ -339,16 +350,38 @@ export default function TaskFullPage() {
             <BlockEditor
               value={form.description}
               onChange={(val) => {
+                if (!canEdit && !isNew) return
                 handleChange('description', val)
                 if (!isNew && sourceTask?.id) updateTask(sourceTask.id, { description: val })
               }}
               placeholder="Agrega una descripción detallada de la tarea..."
+              editable={canEdit || isNew}
+              contentKey={sourceTask?.id || 'new'}
             />
           </div>
 
+          {/* Subtasks */}
+          {!isNew && sourceTask?.id && (
+            <div className="mb-8 pb-8 border-b border-border">
+              <TaskSubtasks
+                taskId={sourceTask.id}
+                boardId={sourceTask.board_id || state.currentBoard?.id}
+              />
+            </div>
+          )}
+
           {/* Comments */}
           {!isNew && sourceTask?.id && (
-            <TaskComments taskId={sourceTask.id} />
+            <div className="mb-8 pb-8 border-b border-border">
+              <TaskComments taskId={sourceTask.id} />
+            </div>
+          )}
+
+          {/* Activity */}
+          {!isNew && sourceTask?.id && (
+            <div className="mb-8">
+              <TaskActivity taskId={sourceTask.id} />
+            </div>
           )}
         </div>
       </div>

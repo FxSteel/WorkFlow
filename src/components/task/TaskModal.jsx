@@ -5,14 +5,21 @@ import { useAuth } from '../../context/AuthContext'
 import { useSupabase } from '../../hooks/useSupabase'
 import BlockEditor from '../ui/BlockEditor'
 import DatePicker from '../ui/DatePicker'
+import TaskComments from './TaskComments'
+import TaskSubtasks from './TaskSubtasks'
+import TaskActivity from './TaskActivity'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select'
 import { cn } from '../../lib/utils'
 import { STATUS_OPTIONS, STATUS_COLORS, PRIORITY_OPTIONS } from '../../lib/constants'
 import { toast } from 'sonner'
+import { usePermissions } from '../../hooks/usePermissions'
 
 export default function TaskModal() {
   const { state, closeTaskModal } = useApp()
   const { user } = useAuth()
+  const { can } = usePermissions()
+  const canEdit = can('editTask')
+  const canCreate = can('createTask')
   const { updateTask, createTask } = useSupabase()
   const task = state.selectedTask
 
@@ -58,6 +65,8 @@ export default function TaskModal() {
     }
   }, [task])
 
+  const allowEdit = isNew ? canCreate : canEdit
+
   if (!state.isTaskModalOpen) return null
 
   const handleSave = async () => {
@@ -69,6 +78,7 @@ export default function TaskModal() {
       due_date: form.due_date || null,
     }
     if (isNew) {
+      if (!canCreate) return
       await createTask({
         ...payload,
         board_id: state.currentBoard.id,
@@ -76,6 +86,7 @@ export default function TaskModal() {
       })
       toast.success('Tarea creada')
     } else {
+      if (!canEdit) return
       await updateTask(task.id, payload)
       toast.success('Cambios guardados')
     }
@@ -99,7 +110,7 @@ export default function TaskModal() {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 className="text-lg font-semibold text-card-foreground">
-            {isNew ? 'Nueva tarea' : 'Editar tarea'}
+            {isNew ? 'Nueva tarea' : (canEdit ? 'Editar tarea' : 'Ver tarea')}
           </h2>
           <button
             onClick={closeTaskModal}
@@ -117,6 +128,7 @@ export default function TaskModal() {
               value={form.title}
               onChange={(e) => handleChange('title', e.target.value)}
               placeholder="Título de la tarea"
+              readOnly={!allowEdit}
               className="w-full text-xl font-semibold bg-transparent text-foreground border-0 focus:outline-none placeholder:text-muted-foreground"
             />
           </div>
@@ -129,7 +141,7 @@ export default function TaskModal() {
                 <Tag className="w-3.5 h-3.5" />
                 Estado
               </label>
-              <Select value={form.status} onValueChange={(val) => handleChange('status', val)}>
+              <Select value={form.status} onValueChange={(val) => handleChange('status', val)} disabled={!allowEdit}>
                 <SelectTrigger>
                   {(() => {
                     const s = (state.boardStatuses || []).find(bs => bs.name === form.status)
@@ -152,7 +164,7 @@ export default function TaskModal() {
                 <Flag className="w-3.5 h-3.5" />
                 Prioridad
               </label>
-              <Select value={form.priority} onValueChange={(val) => handleChange('priority', val)}>
+              <Select value={form.priority} onValueChange={(val) => handleChange('priority', val)} disabled={!allowEdit}>
                 <SelectTrigger>
                   <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium', PRIORITY_OPTIONS.find(p=>p.value===form.priority)?.color, form.priority === 'medium' ? 'text-black' : 'text-white')}>
                     {PRIORITY_OPTIONS.find(p=>p.value===form.priority)?.label}
@@ -178,6 +190,7 @@ export default function TaskModal() {
                 value={form.assignee_id}
                 valueName={form.assignee_name}
                 users={assignableUsers}
+                disabled={!allowEdit}
                 onChange={(id, name) => {
                   handleChange('assignee_id', id)
                   handleChange('assignee_name', name)
@@ -194,6 +207,7 @@ export default function TaskModal() {
               <DatePicker
                 value={form.due_date}
                 onChange={(val) => handleChange('due_date', val)}
+                disabled={!allowEdit}
               />
             </div>
 
@@ -206,6 +220,7 @@ export default function TaskModal() {
               <Select
                 value={form.sprint_id || '_none'}
                 onValueChange={(val) => handleChange('sprint_id', val === '_none' ? null : val)}
+                disabled={!allowEdit}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Sin asignar" />
@@ -230,6 +245,7 @@ export default function TaskModal() {
                 value={form.tags}
                 onChange={(e) => handleChange('tags', e.target.value)}
                 placeholder="frontend, bug, urgente..."
+                readOnly={!allowEdit}
                 className="w-full px-3 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
               />
             </div>
@@ -246,9 +262,35 @@ export default function TaskModal() {
                 value={form.description}
                 onChange={(val) => handleChange('description', val)}
                 placeholder="Describe la tarea en detalle..."
+                editable={allowEdit}
+                contentKey={task?.id || 'new'}
               />
             </div>
           </div>
+
+          {/* Subtasks */}
+          {!isNew && task?.id && (
+            <div className="pt-2 border-t border-border">
+              <TaskSubtasks
+                taskId={task.id}
+                boardId={task.board_id || state.currentBoard?.id}
+              />
+            </div>
+          )}
+
+          {/* Comments */}
+          {!isNew && task?.id && (
+            <div className="pt-2 border-t border-border">
+              <TaskComments taskId={task.id} />
+            </div>
+          )}
+
+          {/* Activity */}
+          {!isNew && task?.id && (
+            <div className="pt-2 border-t border-border">
+              <TaskActivity taskId={task.id} />
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -257,21 +299,23 @@ export default function TaskModal() {
             onClick={closeTaskModal}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-secondary text-secondary-foreground hover:bg-accent transition-colors"
           >
-            Cancelar
+            {allowEdit ? 'Cancelar' : 'Cerrar'}
           </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
-          >
-            {isNew ? 'Crear tarea' : 'Guardar cambios'}
-          </button>
+          {allowEdit && (
+            <button
+              onClick={handleSave}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
+            >
+              {isNew ? 'Crear tarea' : 'Guardar cambios'}
+            </button>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-function AssigneePicker({ value, valueName, users, onChange }) {
+function AssigneePicker({ value, valueName, users, onChange, disabled }) {
   const [open, setOpen] = useState(false)
   const ref = React.useRef(null)
 
@@ -289,8 +333,12 @@ function AssigneePicker({ value, valueName, users, onChange }) {
     <div className="relative" ref={ref}>
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        className="flex h-9 w-full items-center gap-2 rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+        onClick={() => { if (!disabled) setOpen(!open) }}
+        disabled={disabled}
+        className={cn(
+          "flex h-9 w-full items-center gap-2 rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground transition-colors",
+          disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-accent"
+        )}
       >
         {selectedUser ? (
           <>
